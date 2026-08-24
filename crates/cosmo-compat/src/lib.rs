@@ -42,3 +42,30 @@ pub unsafe extern "C" fn __xpg_strerror_r(
    *buf.add(n) = 0;
    0
 }
+
+extern "C" {
+   fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
+}
+
+/// `waitid`, which cosmopolitan does not provide but std's `Process::wait`
+/// references unconditionally (its pidfd path, `P_PIDFD`, is compiled in for
+/// every linux target). Linking is the requirement; the semantics only matter
+/// if the function is ever reached, and on cosmo std never creates a pidfd, so
+/// it is not. Implemented over `waitpid` for the `P_PID`/`P_ALL` shapes anyway:
+/// `siginfo_t.si_status` receives the raw wait status and `si_pid` the pid, at
+/// the Linux offsets std reads (`si_pid` at byte 16, `si_status` at 24).
+#[no_mangle]
+pub unsafe extern "C" fn waitid(idtype: c_int, id: c_int, infop: *mut c_int, options: c_int) -> c_int {
+   const P_ALL: c_int = 0;
+   const P_PID: c_int = 1;
+   const WNOWAIT: c_int = 0x0100_0000;
+   let pid = match idtype { P_ALL => -1, P_PID => id, _ => return -1 };
+   let mut status: c_int = 0;
+   let r = waitpid(pid, &mut status, options & !WNOWAIT & 0xff);
+   if r < 0 { return -1; }
+   if !infop.is_null() {
+      *infop.add(4) = r;        // si_pid
+      *infop.add(6) = status;   // si_status
+   }
+   0
+}

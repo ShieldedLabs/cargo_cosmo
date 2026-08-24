@@ -5,8 +5,8 @@ Cargo has no concept of a multi-architecture artifact, so one `cargo build`
 can never produce an APE. This driver runs the build once per architecture and
 fuses the two ELFs with apelink, which is exactly what cosmocc does for C.
 
-    cargo cosmo build [--release] [-- <extra cargo args>]
-    cargo cosmo run    [--release] [-- <args to the program>]
+    cargo cosmo build [--release] [<cargo args: --example X, --features Y, ...>]
+    cargo cosmo run    [--release] [<cargo args>] [-- <args to the program>]
     cargo cosmo clean
 
 Output lands in target/cosmo/<name>.com and runs on x86-64 and arm64.
@@ -95,8 +95,14 @@ def build_arch(arch, profile, extra):
       cmd.append("--release")
    cmd += extra
 
+   # `cfg(cosmo)` lets a crate pick a cosmo-specific code path (softer_gui routes
+   # its syscalls through cosmo's libc under it). Appended to, not replacing, any
+   # RUSTFLAGS the caller set. CARGO_ENCODED_RUSTFLAGS would win over this if set.
+   env = dict(os.environ)
+   env["RUSTFLAGS"] = (env.get("RUSTFLAGS", "") + " --cfg cosmo").strip()
+
    print(f"cargo-cosmo: building {arch}", file=sys.stderr)
-   proc = subprocess.run(cmd, capture_output=True, text=True)
+   proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
    if proc.returncode != 0:
       sys.stderr.write(proc.stderr)
       die(f"{arch} build failed")
