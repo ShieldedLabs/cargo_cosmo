@@ -117,12 +117,12 @@ translation shim viable. The property that blocks one solution enables the other
 | # | Item | Status |
 |---|------|--------|
 | 1 | Target specs `{x86_64,aarch64}-unknown-cosmo` | **done** — generated in `targets/`. Out-of-tree JSON specs; upstreaming as tier-3 would start from a `#![no_core]` spec to break the rustc<->libc<->std cycle |
-| 2 | Normalization shim | **built, unrun off-Linux** — `crates/cosmo-compat` wraps std's 123 libc imports via `ld --wrap` (list in `wrap.txt`, added by `cosmo-ld`); `tools/gen-shim.py` generates the tables from `data/syscon-*.json`. Translation logic is unit-tested on Linux against the table's Windows and XNU columns; the runtime path is verified on Linux only, where it is the identity. See "Stage 2 as built" below |
+| 2 | Normalization shim | **built, and run on macOS** — `crates/cosmo-compat` wraps std's 123 libc imports via `ld --wrap` (list in `wrap.txt`, added by `cosmo-ld`); `tools/gen-shim.py` generates the tables from `data/syscon-*.json`. Translation logic is unit-tested on Linux against the table's Windows and XNU columns. The runtime path is now exercised on macOS 15.7.2/arm64, where it does its job: files, dirs, threads, time and unwinding work, and `connect` to a closed port reports `ConnectionRefused` instead of a mistranslated errno. Windows is still unrun. See "Stage 2 as built" below |
 | 3 | `std::sys::pal::cosmo` | **not started** — fork of `pal/unix` with the cfg forest collapsed to cosmo's everywhere-POSIX subset: `poll` not `epoll`/`kqueue`, pthreads, no `/proc`, no `statx` |
 | 4 | Unwinding | **done, and easier than expected** — `libcosmo.a` defines the full `_Unwind_*` ABI and both linker scripts emit `.eh_frame_hdr`/`.gcc_except_table`, so `panic=unwind` and `catch_unwind` work today. The "cosmo has no unwinder" limitation in the older prior art is stale |
 | 5 | `cargo-cosmo` | **done** — builds both arches and runs `apelink`; cargo itself has no multi-arch output concept |
 | 6 | Ecosystem cfg arms | **not started** — `getrandom`, `mio`, `socket2`, `parking_lot`. `getrandom` and `mio` are what gate tokio |
-| 7 | Cross-OS test matrix | **not started** — booting artifacts on Linux/macOS/Windows/FreeBSD. Nothing in Rust CI does this; without it the target silently rots |
+| 7 | Cross-OS test matrix | **macOS covered by hand** — `tests/run-all.sh` is host-aware and runs 13/13 on macOS/arm64; `cross-os-probe` and a full GUI program (softer_gui) both run there. Windows and the BSDs untested, and none of it is automated, so the target can still rot silently |
 
 Items 1, 4 and 5 are what "one fat APE per crate, Linux-only" needed. Items 2 and 3
 are what "runs on every OS" needs, and they are the months of work. Tokio-class
@@ -161,10 +161,30 @@ Two properties the design depends on, both deliberate:
   type, so an untyped forwarder is exact. Functions whose arguments carry
   constants are written by hand.
 
-Known hazard: because `--wrap` redirects cosmo-internal calls too, a cosmo
-routine calling public `open(O_CLOEXEC)` with a HOST value gets re-translated.
-Harmless on Windows (identity for those groups), real on XNU. The fix if it
-bites is to wrap only std's objects (`objcopy --redefine-sym` on the rlibs).
+Known hazard, now observed: because `--wrap` redirects cosmo-internal calls
+too, a cosmo routine calling a wrapped public symbol gets its arguments
+translated a second time. Harmless on Windows (identity for those groups), real
+on XNU, where it was measured: cosmopolitan's `open()` is a forwarder to
+`openat()`, and the disassembly of a linked APE shows the internal call landing
+in the wrapper --
+
+    80003c63c:  bl  800008a70 <__wrap_openat>
+
+-- so `File::create` arrived at the kernel with O_CREAT already mangled and
+failed with ENOENT on a Mac. `__wrap_open` now calls `__real_openat` directly,
+which is the leaf (cosmo's `openat` goes straight to `__sys_openat`), so the
+translation happens exactly once. That fixes the path std actually uses; the
+hazard itself is still there for any other cosmo routine that calls a wrapped
+public symbol, and the general fix remains wrapping only std's objects
+(`objcopy --redefine-sym` on the rlibs).
+
+A second gap the Mac found: `clock_gettime` and `clock_nanosleep` had been
+classified as errno-only passthroughs, but their first argument is a
+`clockid_t` -- `CLOCK_MONOTONIC` is 1 on Linux and 8 on XNU. Untranslated, the
+first `Instant::now()` on a Mac returns EINVAL and std panics before the
+program does anything. They are hand-written now. The lesson generalizes: a
+function belongs in `HAND` if *any* argument is a constant, not only if it
+looks like flags.
 
 Not translated: `struct stat` layout (cosmo's is the x86-64 Linux/musl layout on
 both arches, so the aarch64 half's std, built for musl-aarch64's generic layout,

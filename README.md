@@ -32,9 +32,12 @@ catch_unwind caught = true
 | arm64 build | builds; verified structurally, not executed (no emulator on this host) |
 | **fat x86-64 + arm64 APE** | works, `pecheck`-clean |
 | `io::Error` formatting | works — needs the `cosmo-compat` shim, see below |
-| Runs on non-Linux OSes | **shim built, unrun there** — std's libc calls are translated at the boundary (`crates/cosmo-compat`, see [docs/DESIGN.md](docs/DESIGN.md) "Stage 2 as built"); its logic is tested against the Windows and macOS constant tables on Linux, the binaries have not yet been run on either |
+| Runs on macOS | **yes** — measured on macOS 15.7.2 / arm64: files, dirs, threads, time, TCP and unwinding all work through the stage-2 shim, and a full GUI program runs from the same file. See below |
+| Runs on Windows / the BSDs | shim covers them, still unrun — `examples/cross-os-probe` is the way to find out |
 
-`tests/run-all.sh` builds and runs all of it: 11 checks, no mocks.
+`tests/run-all.sh` builds and runs all of it: 13 checks, no mocks. It is
+host-aware — on a Mac it swaps the Linux-only invariants for the ones that hold
+there, and passes 13/13.
 
 Notably, `panic = "unwind"` works. The prior art in this space documents cosmo as
 having no unwinder; that is now stale. `libcosmo.a` defines the complete
@@ -84,6 +87,38 @@ x86-64 cosmo supports every OS (`SUPPORT_VECTOR 255`); arm64 covers
 Linux/macOS/FreeBSD. So an Apple Silicon Mac exercises the arm64 half and a
 Windows PC the x86-64 half — the two halves this repo cannot execute on a Linux
 x86-64 host.
+
+### What the Mac said
+
+Run on macOS 15.7.2 / arm64. cosmo reports `xnu (macOS)` while rustc still says
+`os=linux`; of 47 probed constants **24 are identical, 22 diverge, 0 are
+unexpected**, so the extractor predicted every XNU value correctly. With the
+stage-2 shim in the path, std works there: stdout, heap, `env::args`, time,
+threads, file write+read, dir listing, `panic` + `catch_unwind`, and a
+`connect` to a closed port reports `ConnectionRefused` rather than a
+mistranslated errno. `tests/run-all.sh` is 13/13 on that host.
+
+Running it found two holes in the shim, both fixed:
+
+* `clock_gettime` and `clock_nanosleep` were generated as errno-only
+  passthroughs, but their first argument is a `clockid_t` and
+  `CLOCK_MONOTONIC` is 1 on Linux, 8 on XNU. The first `Instant::now()` on a
+  Mac died with EINVAL.
+* The double-translation hazard is real on XNU. cosmo's own `open()` forwards
+  to `openat()`, `--wrap` catches that internal call too, and the flags were
+  translated twice — `File::create` failed with ENOENT. `__wrap_open` now goes
+  straight to the leaf.
+
+Two build settings also have to be avoided, and `cargo-cosmo` overrides them:
+`codegen-units = 1` hangs `JoinHandle::join`, and `lto = "fat"` corrupts the
+caller of `thread::spawn`. Related trap while debugging either: std's
+stack-overflow handler is called with a NULL `siginfo_t` under cosmo, so it
+faults inside the SIGSEGV handler and the process wedges instead of dying —
+the hang appears nowhere near the fault.
+
+A real GUI program now runs from one APE on macOS:
+[softer_gui](https://github.com/ShieldedLabs/softer_gui) — window, software
+renderer and vblank-exact pacing, from the same file that runs on Linux.
 
 ## The catch, stated plainly
 

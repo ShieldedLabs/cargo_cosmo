@@ -106,9 +106,23 @@ unsafe fn with_host_addr<R>(addr: *const c_void, alen: u32, f: impl FnOnce(*cons
 }
 
 // ---- files ----------------------------------------------------------------------
+/// Goes to `__real_openat`, not `__real_open`, and that is load-bearing.
+///
+/// cosmopolitan's own `open()` is a thin forwarder to `openat()` -- and because
+/// `--wrap` rewrites references from *every* object, including libcosmo's, that
+/// internal call lands back in `__wrap_openat`, which translates the flags a
+/// second time. On Linux this is invisible (the groups are the identity); on
+/// XNU the second pass turns O_CREAT into something else and `File::create`
+/// fails with ENOENT. Calling the leaf directly -- cosmo's `openat` goes
+/// straight to `__sys_openat` -- keeps the translation to exactly one pass.
+///
+/// This is the general hazard in docs/DESIGN.md, fixed for the one path std
+/// actually uses. Any other cosmo routine that calls a wrapped public symbol
+/// has the same problem waiting in it.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_open(path: *const c_char, flags: c_int, mode: c_uint) -> c_int {
-    ret(unsafe { __real_open(path, open_flags(flags), mode) })
+    const AT_FDCWD: c_int = -100;   // canonical (Linux); at_fd() gives the host's
+    ret(unsafe { __real_openat(at_fd(AT_FDCWD), path, open_flags(flags), mode) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_openat(dirfd: c_int, path: *const c_char, flags: c_int, mode: c_uint) -> c_int {
@@ -273,6 +287,31 @@ pub unsafe extern "C" fn __wrap_freeaddrinfo(ai: *mut AddrInfo) {
     // Undo what __wrap_getaddrinfo did before handing the list back to cosmo's allocator walk;
     // it only frees, but keep its view consistent.
     unsafe { __real_freeaddrinfo(ai) }
+}
+
+// ---- clocks ----------------------------------------------------------------------
+// These were generated as errno-only passthroughs, which is wrong: the first
+// argument is a clockid_t, and the clock group is one of the widest divergences
+// in the table (CLOCK_MONOTONIC is 1 on Linux, 8 on XNU). Untranslated, the
+// first `Instant::now()` on a Mac fails with EINVAL and std panics before the
+// program has done anything.
+unsafe extern "C" {
+    fn __real_clock_gettime(id: c_int, ts: *mut c_void) -> c_int;
+    fn __real_clock_nanosleep(id: c_int, flags: c_int, req: *const c_void, rem: *mut c_void) -> c_int;
+}
+
+#[inline] fn clockid(id: c_int) -> c_int { gen::clock().to_host(id as i64) as c_int }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_clock_gettime(id: c_int, ts: *mut c_void) -> c_int {
+    ret(unsafe { __real_clock_gettime(clockid(id), ts) })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_clock_nanosleep(id: c_int, flags: c_int, req: *const c_void, rem: *mut c_void) -> c_int {
+    // clock_nanosleep reports failure as a positive errno, not -1/errno.
+    let r = unsafe { __real_clock_nanosleep(clockid(id), flags, req, rem) };
+    if r != 0 { xlate::errno_to_linux(r as i64) as c_int } else { 0 }
 }
 
 // ---- poll ------------------------------------------------------------------------

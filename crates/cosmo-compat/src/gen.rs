@@ -1679,20 +1679,6 @@ pub unsafe extern "C" fn __wrap_sigaltstack(a: usize, b: usize, c: usize, d: usi
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_clock_gettime(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_clock_gettime(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_clock_gettime(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
-unsafe extern "C" { fn __real_clock_nanosleep(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_clock_nanosleep(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_clock_nanosleep(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
 unsafe extern "C" { fn __real_fdopendir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fdopendir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {

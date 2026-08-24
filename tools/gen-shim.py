@@ -67,7 +67,7 @@ PASSTHROUGH = {
       pipe2 pread preadv pwrite pwritev read readlink
       readv rename rmdir sched_getaffinity sendfile setgid setgroups setpgid
       setsid setuid splice stat symlink sysconf syscall unlink write writev
-      shutdown mprotect sigaltstack clock_gettime clock_nanosleep""".split(),
+      shutdown mprotect sigaltstack""".split(),
    "ptr": "fdopendir getcwd opendir readdir realpath".split(),
    "code": """getpwuid_r posix_spawnattr_destroy posix_spawnattr_init
       posix_spawnattr_setflags posix_spawnattr_setpgroup
@@ -82,7 +82,7 @@ PASSTHROUGH = {
 HAND = """open openat fcntl ioctl socket socketpair setsockopt getsockopt send
    sendto recv recvfrom sendmsg recvmsg poll mmap sigaction signal kill killpg
    sigaddset waitpid unlinkat linkat renameat fchmodat utimensat getaddrinfo
-   freeaddrinfo""".split()
+   freeaddrinfo clock_gettime clock_nanosleep""".split()
 
 
 def ape(path, *args):
