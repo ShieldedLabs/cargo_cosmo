@@ -1,0 +1,163 @@
+TODO: report the __xpg_strerror_r return-type bug upstream
+==========================================================
+
+STATUS: not yet filed.
+WHERE:  https://github.com/jart/cosmopolitan/issues
+WHY IT MATTERS HERE: crates/cosmo-compat exists solely to work around this.
+                     Once upstream fixes it, delete that crate and the
+                     `extern crate cosmo_compat as _;` lines in
+                     examples/rust-std and examples/cross-os-probe.
+
+Everything below is a draft written to be pasted straight into an issue.
+It has been verified against the bundle identified in "Environment".
+
+
+----------------------------------------------------------------------
+TITLE
+----------------------------------------------------------------------
+
+__xpg_strerror_r has the GNU return type; XSI callers (incl. Rust std) break
+
+
+----------------------------------------------------------------------
+SUMMARY
+----------------------------------------------------------------------
+
+libc/str/str.h declares the two strerror_r variants with their return
+types swapped relative to every other libc:
+
+    line 115:  char *strerror(int) returnsnonnull dontthrow dontcallback;
+    line 116:  errno_t strerror_r(int, char *, size_t) libcesque;
+    line 117:  char *__xpg_strerror_r(int, char *, size_t) libcesque;
+
+Line 116 is correct. Line 117 is not.
+
+`__xpg_strerror_r` is glibc's *internal name for the XSI-conformant
+variant* -- that is the entire reason the symbol exists. From glibc's
+own string.h (lines 464-472):
+
+    extern int __REDIRECT_NTH (strerror_r,
+                               (int __errnum, char *__buf, size_t __buflen),
+                               __xpg_strerror_r) __nonnull ((2))
+    ...
+    extern int __xpg_strerror_r (int __errnum, char *__buf, size_t __buflen)
+         __THROW __nonnull ((2)) ...
+    #   define strerror_r __xpg_strerror_r
+
+So in glibc the symbol returns `int`, and `strerror_r` is redirected to
+it exactly when XSI semantics are requested (_POSIX_C_SOURCE without
+_GNU_SOURCE). The GNU `char *` variant is the plain `strerror_r`.
+Cosmopolitan has that relationship inverted for this symbol.
+
+Any caller that links `__xpg_strerror_r` does so *precisely because* it
+wants XSI semantics. Handing those callers a pointer is silently wrong,
+and it is wrong in the most damaging way -- a pointer reinterpreted as
+`int` is usually negative, which is the XSI error indication.
+
+
+----------------------------------------------------------------------
+REPRODUCTION (C)
+----------------------------------------------------------------------
+
+    #include <stdio.h>
+    #include <string.h>
+    #include <stdint.h>
+    int main(void) {
+       char buf[128];
+       for (int i = 0; i < 4; i++) {
+          int e = (int[]){22, 2, 111, 95}[i];
+          memset(buf, 0, sizeof buf);
+          char *r = __xpg_strerror_r(e, buf, sizeof buf);
+          printf("errno=%-4d ret=%p as_int=%-12d %s buf=\"%s\"\n",
+                 e, (void *)r, (int)(intptr_t)r,
+                 (int)(intptr_t)r < 0 ? "NEGATIVE" : "ok", buf);
+       }
+       return 0;
+    }
+
+    $ cosmocc -O1 -o xpg.com xpg.c && ./xpg.com
+    errno=22   ret=0x7ffdc7c4a2b0 as_int=-943414608  NEGATIVE buf="Invalid argument"
+    errno=2    ret=0x7ffdc7c4a2b0 as_int=-943414608  NEGATIVE buf="No such file or directory"
+    errno=111  ret=0x7ffdc7c4a2b0 as_int=-943414608  NEGATIVE buf="Connection refused"
+    errno=95   ret=0x7ffdc7c4a2b0 as_int=-943414608  NEGATIVE buf="Operation not supported"
+
+The message is written into the buffer correctly. Only the return value
+is wrong. Note it returns the caller's own buffer, so on Linux x86-64 the
+low 32 bits are a stack address (0x7ffd...) and the sign bit is set --
+this reproduces essentially every run, it is not a rare race.
+
+
+----------------------------------------------------------------------
+IMPACT: Rust
+----------------------------------------------------------------------
+
+Rust's std links this symbol by name and requires the XSI contract:
+
+    library/std/src/sys/io/error/unix.rs
+        #[cfg_attr(all(any(target_os = "linux", ...), ...),
+                   link_name = "__xpg_strerror_r")]
+        fn strerror_r(errnum: c_int, buf: *mut c_char, buflen: size_t) -> c_int;
+        ...
+        if strerror_r(errno as c_int, p, buf.len()) < 0 {
+            panic!("strerror_r failure");
+        }
+
+So under cosmopolitan, formatting *any* std::io::Error aborts:
+
+    thread 'main' panicked at .../sys/io/error/unix.rs:223:13:
+    strerror_r failure
+
+This is not an edge case. It takes out ordinary error handling -- a
+failed open, a refused connection, anything that reaches `{}` or
+`{:?}` on an io::Error -- so it fires long before a program does
+anything exotic. It is also confusing to diagnose, because the panic
+names strerror_r while the program was only printing an error.
+
+Anything else expecting the XSI contract will hit this too; Rust is
+just where we happened to find it.
+
+
+----------------------------------------------------------------------
+SUGGESTED FIX
+----------------------------------------------------------------------
+
+Give __xpg_strerror_r the same signature as strerror_r, which is already
+correct one line above:
+
+    -char *__xpg_strerror_r(int, char *, size_t) libcesque;
+    +errno_t __xpg_strerror_r(int, char *, size_t) libcesque;
+
+and return 0 on success / an errno on failure (ERANGE when the buffer is
+too small, EINVAL for an unknown errnum), rather than the buffer pointer.
+
+Callers wanting GNU semantics already have `strerror`, and cosmopolitan's
+`strerror_r` is unaffected either way.
+
+If the current behaviour is intentional for some compatibility reason we
+have not found, it would be worth saying so in the header, because the
+name strongly implies the opposite to anyone who knows why glibc has it.
+
+
+----------------------------------------------------------------------
+ENVIRONMENT
+----------------------------------------------------------------------
+
+cosmocc bundle : https://cosmo.zip/pub/cosmocc/cosmocc.zip
+                 downloaded 2026-08-24, 441763966 bytes
+                 sha256 starts 85b8c37a406d862e656ad4ec14be9f6c
+cosmocc         : cosmocc (GCC) 14.1.0, Copyright (c) 2024
+host            : x86-64 Linux
+rust            : nightly-2026-08-23 (1.100.0-nightly fb6531d55)
+found via       : https://github.com/ShieldedLabs/cargo_cosmo
+
+
+----------------------------------------------------------------------
+AFTER FILING
+----------------------------------------------------------------------
+
+1. Put the issue URL in this file and in crates/cosmo-compat/src/lib.rs,
+   so the shim carries a link to the reason it exists.
+2. When it lands: delete crates/cosmo-compat, drop the dependency and the
+   `extern crate` lines from the two examples, and keep the
+   "io::Error formatting" check in tests/run-all.sh -- it should still
+   pass without the shim, and that is exactly what proves the fix.
