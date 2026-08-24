@@ -32,7 +32,7 @@ catch_unwind caught = true
 | arm64 build | builds; verified structurally, not executed (no emulator on this host) |
 | **fat x86-64 + arm64 APE** | works, `pecheck`-clean |
 | `io::Error` formatting | works — needs the `cosmo-compat` shim, see below |
-| Runs on non-Linux OSes | **unknown, and now testable** — see below |
+| Runs on non-Linux OSes | **shim built, unrun there** — std's libc calls are translated at the boundary (`crates/cosmo-compat`, see [docs/DESIGN.md](docs/DESIGN.md) "Stage 2 as built"); its logic is tested against the Windows and macOS constant tables on Linux, the binaries have not yet been run on either |
 
 `tests/run-all.sh` builds and runs all of it: 11 checks, no mocks.
 

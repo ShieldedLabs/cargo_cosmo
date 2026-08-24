@@ -117,7 +117,7 @@ translation shim viable. The property that blocks one solution enables the other
 | # | Item | Status |
 |---|------|--------|
 | 1 | Target specs `{x86_64,aarch64}-unknown-cosmo` | **done** — generated in `targets/`. Out-of-tree JSON specs; upstreaming as tier-3 would start from a `#![no_core]` spec to break the rustc<->libc<->std cycle |
-| 2 | `libc` cosmo module | **not started** — the generated normalization shim, and the load-bearing piece. Source table already extracted to `data/syscon-*.json` |
+| 2 | Normalization shim | **built, unrun off-Linux** — `crates/cosmo-compat` wraps std's 123 libc imports via `ld --wrap` (list in `wrap.txt`, added by `cosmo-ld`); `tools/gen-shim.py` generates the tables from `data/syscon-*.json`. Translation logic is unit-tested on Linux against the table's Windows and XNU columns; the runtime path is verified on Linux only, where it is the identity. See "Stage 2 as built" below |
 | 3 | `std::sys::pal::cosmo` | **not started** — fork of `pal/unix` with the cfg forest collapsed to cosmo's everywhere-POSIX subset: `poll` not `epoll`/`kqueue`, pthreads, no `/proc`, no `statx` |
 | 4 | Unwinding | **done, and easier than expected** — `libcosmo.a` defines the full `_Unwind_*` ABI and both linker scripts emit `.eh_frame_hdr`/`.gcc_except_table`, so `panic=unwind` and `catch_unwind` work today. The "cosmo has no unwinder" limitation in the older prior art is stale |
 | 5 | `cargo-cosmo` | **done** — builds both arches and runs `apelink`; cargo itself has no multi-arch output concept |
@@ -127,6 +127,50 @@ translation shim viable. The property that blocks one solution enables the other
 Items 1, 4 and 5 are what "one fat APE per crate, Linux-only" needed. Items 2 and 3
 are what "runs on every OS" needs, and they are the months of work. Tokio-class
 async is beyond even that.
+
+## Stage 2 as built
+
+Not a `libc` crate fork. std keeps calling `open`, `socket`, `poll` … by name with
+Linux-numbered arguments; `cosmo-ld` links every program with `-Wl,--wrap=NAME`
+for each name in `crates/cosmo-compat/wrap.txt`, so those calls land in
+`__wrap_NAME` in `cosmo-compat/src/shim.rs`, which translates arguments to the
+host's numbering, calls `__real_NAME` (cosmo's), and translates errno, `revents`,
+`sa_family`, wait statuses and option results back. The host values are cosmo's
+own load-time symbols (`extern const int EAGAIN` etc.), read at run time — the
+binary carries no per-OS table, and the JSON columns exist only so the logic can
+be tested on a Linux host (`cargo test` in `crates/cosmo-compat`, Windows column
+by default, `COSMO_TEST_HOST=xnu` for macOS).
+
+What the table says about Windows specifically: cosmo keeps Linux numbering there
+for `O_*`, `MAP_*`, `SIG*`, `F_*`, `AT_*`, `CLOCK_*`, `SOCK_*`. What diverges is
+errno (WinSock/Win32 numbers), the socket option layer (`AF_INET6`, `SOL_SOCKET`,
+`SO_*`, `MSG_NOSIGNAL`, `IPV6_*`, `IP_*`), `POLL*`, `FIONBIO`. So on Windows most
+groups are the identity and the shim's real work is errno and sockets. XNU
+diverges far more widely (signals, `O_*`, `AT_FDCWD`, `CLOCK_*`) and the same
+generated tables cover it.
+
+Two properties the design depends on, both deliberate:
+
+* **Every wrapper is heap-free and lock-free, and is the identity until cosmo's
+  tables are filled.** `--wrap` also captures cosmopolitan's own startup calls
+  (its first `open`/`mmap`), before std's runtime exists. A first version used
+  `OnceLock` and segfaulted there.
+* **Wrapped functions taking only integer/pointer arguments are wrapped by a
+  generated six-register passthrough** rather than a typed signature each: SysV
+  and AAPCS pass those in the first integer registers regardless of declared
+  type, so an untyped forwarder is exact. Functions whose arguments carry
+  constants are written by hand.
+
+Known hazard: because `--wrap` redirects cosmo-internal calls too, a cosmo
+routine calling public `open(O_CLOEXEC)` with a HOST value gets re-translated.
+Harmless on Windows (identity for those groups), real on XNU. The fix if it
+bites is to wrap only std's objects (`objcopy --redefine-sym` on the rlibs).
+
+Not translated: `struct stat` layout (cosmo's is the x86-64 Linux/musl layout on
+both arches, so the aarch64 half's std, built for musl-aarch64's generic layout,
+may read `st_*` fields wrongly — unverified), `dirent`, `ioctl` argument
+structures, and anything std reaches through `syscall(2)` directly (it only
+does so for Linux-specific features it already falls back from).
 
 ## What cosmo does and does not give you
 

@@ -73,6 +73,14 @@ banner "fat binary carries both architectures"
 check-fat.py "$REPO/examples/rust-std/target/cosmo/stdhello.com"
 ok_if $? "both architectures present" "fat binary missing an architecture"
 
+# -------------------------------------------------------- normalization shim
+banner "stage-2 shim: translation tables vs the Windows and XNU columns (host tests)"
+cd "$REPO/crates/cosmo-compat" || exit 1
+cargo test --quiet >/dev/null 2>&1
+ok_if $? "translation logic against the Windows column" "cosmo-compat tests failed (windows)"
+COSMO_TEST_HOST=xnu cargo test --quiet >/dev/null 2>&1
+ok_if $? "translation logic against the XNU column" "cosmo-compat tests failed (xnu)"
+
 # -------------------------------------------------------------- syscon probe
 banner "cosmo runtime constants visible from Rust"
 cd "$REPO/examples/syscon-probe" || exit 1
