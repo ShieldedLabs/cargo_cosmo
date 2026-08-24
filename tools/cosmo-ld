@@ -79,6 +79,11 @@ if [ -f "$WRAPLIST" ]; then
    for sym in $(grep -v '^#' "$WRAPLIST"); do WRAPS="$WRAPS -Wl,--wrap=$sym"; done
 fi
 
+# COSMO_LD_DEBUG=<file> records the reconciled link line. It is the only way to
+# see what rustc actually handed us -- which rlibs, in which order, and whether
+# fat LTO merged them into one object before the linker ever saw them.
+[ -n "$COSMO_LD_DEBUG" ] && printf '%s\n' "$ARGS" >> "$COSMO_LD_DEBUG"
+
 # shellcheck disable=SC2086  # word splitting is the point for these flag sets
 "$CC" -o "$OUTPUT" $CRT $COMMON $ARCHFLAGS $WRAPS $ARGS -lcosmo
 

@@ -15,6 +15,20 @@ mod gen;
 pub mod xlate;
 pub mod shim;
 
+/// Keep the two plain overrides alive through `lto = "fat"`.
+///
+/// Nothing in the Rust call graph references them -- std reaches both through
+/// an `extern "C"` declaration LTO cannot see -- so fat LTO internalizes them
+/// away and the libc bugs they exist to fix come back, silently and only in
+/// release builds. (The `__wrap_*` functions do not need this: `--wrap` makes
+/// the linker demand them, so losing one is a link error rather than a quiet
+/// regression.) `#[used]` emits `llvm.used`, which LTO honours.
+#[used]
+static KEEP_SHIMS: (
+   unsafe extern "C" fn(c_int, *mut c_char, usize) -> c_int,
+   unsafe extern "C" fn(c_int, c_int, *mut c_int, c_int) -> c_int,
+) = (__xpg_strerror_r, waitid);
+
 extern "C" {
    fn strerror(errnum: c_int) -> *const c_char;
    fn strlen(s: *const c_char) -> usize;

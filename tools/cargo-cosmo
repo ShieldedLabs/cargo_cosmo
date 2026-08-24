@@ -30,6 +30,28 @@ CARGO_Z = [
    "-Zbuild-std-features=compiler-builtins-mem",
 ]
 
+# Two profile settings produce APEs that misbehave off Linux, and because
+# -Zbuild-std compiles std with the crate's own profile they take std down with
+# them. Both were bisected on macOS/arm64 against a program that works with the
+# defaults:
+#
+#   codegen-units = 1   `JoinHandle::join` never returns -- the child runs and
+#                       exits, the parent waits forever.
+#   lto = "fat"         the caller of `thread::spawn` returns with a frame
+#                       pointer of 0x7fffffffffff and faults on its next stack
+#                       store. std's SIGSEGV handler then dereferences a NULL
+#                       siginfo and the process wedges rather than dying, so the
+#                       symptom is a hang somewhere else entirely.
+#
+# They are overridden rather than warned about because a crate cannot express
+# "this profile, except when building an APE", and softer_gui's release profile
+# sets both. CARGO_COSMO_KEEP_PROFILE=1 keeps whatever the crate asked for --
+# use it to check whether a cosmo release has fixed either bug.
+PROFILE_FIXUPS = [] if os.environ.get("CARGO_COSMO_KEEP_PROFILE") else [
+   "--config", "profile.release.codegen-units=16",
+   "--config", "profile.release.lto=false",
+]
+
 
 def ape(path, *args):
    """Build an argv that can actually exec an APE.
@@ -93,6 +115,7 @@ def build_arch(arch, profile, extra):
            "--message-format=json-render-diagnostics"]
    if profile == "release":
       cmd.append("--release")
+   cmd += PROFILE_FIXUPS
    cmd += extra
 
    # `cfg(cosmo)` lets a crate pick a cosmo-specific code path (softer_gui routes

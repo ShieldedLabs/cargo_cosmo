@@ -16,8 +16,16 @@ export PATH
 # Specs embed an absolute linker path, so they are generated, never committed.
 python3 "$REPO/tools/gen-target-specs.py" >/dev/null
 
+# The host decides what can be *executed* here. A bare cosmo ELF only runs on
+# Linux, and "every constant matches what rustc baked in" is only true there
+# too -- off Linux the right question is whether cosmo's values match what the
+# extracted table predicted, which is what cross-os-probe answers.
+HOST=$(uname -s)
+HOST_ARCH=$(uname -m)
+
 pass=0
 fail=0
+skip=0
 
 check() {
    name=$1; got=$2; want=$3
@@ -38,6 +46,11 @@ ok_if() {
    fi
 }
 
+note() {
+   echo "    skipped: $1 ($2)"
+   skip=$((skip + 1))
+}
+
 banner() { echo; echo "=== $1 ==="; }
 
 # ---------------------------------------------------------------- C baseline
@@ -53,8 +66,16 @@ cargo build --release -Zjson-target-spec \
    -Zbuild-std=core,compiler_builtins \
    -Zbuild-std-features=compiler-builtins-mem \
    --target "$REPO/targets/x86_64-unknown-cosmo.json" >/dev/null 2>&1
-check "no_std links and runs" \
-   "$(./target/x86_64-unknown-cosmo/release/nostd)" "no_std Rust APE"
+if [ "$HOST" = Linux ] && [ "$HOST_ARCH" = x86_64 ]; then
+   check "no_std links and runs" \
+      "$(./target/x86_64-unknown-cosmo/release/nostd)" "no_std Rust APE"
+else
+   # Not an APE, just an x86-64 cosmo ELF: nothing but Linux/x86-64 can exec it.
+   # Linking is still worth asserting, and that is host-independent.
+   head -c 4 ./target/x86_64-unknown-cosmo/release/nostd 2>/dev/null | grep -q ELF
+   ok_if $? "no_std links" "no_std did not produce an ELF"
+   note "running the no_std binary" "needs a Linux x86-64 host, this is $HOST/$HOST_ARCH"
+fi
 
 # ---------------------------------------------------------------------- std
 banner "std Rust -> fat APE"
@@ -85,7 +106,19 @@ ok_if $? "translation logic against the XNU column" "cosmo-compat tests failed (
 banner "cosmo runtime constants visible from Rust"
 cd "$REPO/examples/syscon-probe" || exit 1
 cargo cosmo build --release >/dev/null || exit 1
-check "no constant mismatches" "$(./target/cosmo/syscon-probe.com)" "0 mismatch"
+if [ "$HOST" = Linux ]; then
+   check "no constant mismatches" "$(./target/cosmo/syscon-probe.com)" "0 mismatch"
+else
+   # Off Linux the constants are *expected* to diverge -- that is the port's
+   # open problem, not a regression. What must hold is that cosmo's runtime
+   # values are the ones data/syscon-*.json predicted for this OS; anything
+   # else means the extractor is wrong.
+   echo "    (host is $HOST: constants diverge by design, checking predictions instead)"
+   cd "$REPO/examples/cross-os-probe" || exit 1
+   cargo cosmo build --release >/dev/null || exit 1
+   check "cosmo matches the extracted table for this OS" \
+      "$(./target/cosmo/cross-os-probe.com 2>&1)" "0 unexpected"
+fi
 
 # ------------------------------------------------------ aarch64 reserved regs
 banner "aarch64 honours cosmo's reserved x18/x28"
@@ -97,6 +130,10 @@ ok_if $? "rustc never allocates the reserved registers" \
 
 echo
 echo "================================"
-echo " passed: $pass   failed: $fail"
+if [ "$skip" -gt 0 ]; then
+   echo " passed: $pass   failed: $fail   skipped: $skip"
+else
+   echo " passed: $pass   failed: $fail"
+fi
 echo "================================"
 [ "$fail" -eq 0 ]
