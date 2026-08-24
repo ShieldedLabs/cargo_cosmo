@@ -1,0 +1,11 @@
+[package]
+name = "rust-std-ape"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "stdhello"
+path = "src/main.rs"
+
+[dependencies]
+cosmo-compat = { path = "../../crates/cosmo-compat" }

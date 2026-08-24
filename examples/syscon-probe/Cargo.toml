@@ -1,0 +1,8 @@
+[package]
+name = "syscon-probe"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "syscon-probe"
+path = "src/main.rs"

@@ -1,0 +1,11 @@
+[package]
+name = "cross-os-probe"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "cross-os-probe"
+path = "src/main.rs"
+
+[dependencies]
+cosmo-compat = { path = "../../crates/cosmo-compat" }

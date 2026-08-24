@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""cargo-cosmo -- build a Rust crate into a fat Actually Portable Executable.
+
+Cargo has no concept of a multi-architecture artifact, so one `cargo build`
+can never produce an APE. This driver runs the build once per architecture and
+fuses the two ELFs with apelink, which is exactly what cosmocc does for C.
+
+    cargo cosmo build [--release] [-- <extra cargo args>]
+    cargo cosmo run    [--release] [-- <args to the program>]
+    cargo cosmo clean
+
+Output lands in target/cosmo/<name>.com and runs on x86-64 and arm64.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BIN = os.path.join(REPO, "toolchain", "cosmocc", "bin")
+TARGETS = os.path.join(REPO, "targets")
+ARCHES = ("x86_64", "aarch64")
+
+# std is not shipped prebuilt for a custom target spec, so every build is a
+# build-std build. panic_unwind because cosmo provides the full _Unwind_* ABI.
+CARGO_Z = [
+   "-Zjson-target-spec",
+   "-Zbuild-std=std,panic_unwind",
+   "-Zbuild-std-features=compiler-builtins-mem",
+]
+
+
+def ape(path, *args):
+   """Build an argv that can actually exec an APE.
+
+   Applies to cosmo's own tools (apelink, pecheck) and equally to the binaries
+   this driver produces. The kernel cannot exec an APE directly -- no ELF magic
+   up front and no shebang -- which is fine from a shell, because the APE header
+   is also valid /bin/sh, but posix_spawn has no such fallback and fails with
+   ENOEXEC. Going through sh explicitly is what the format expects. Native ELF
+   files are run directly.
+   """
+   with open(path, "rb") as f:
+      if f.read(4) == b"\x7fELF":
+         return [path, *args]
+   return ["/bin/sh", path, *args]
+
+
+def ensure_spec(arch):
+   """Return the target spec path, regenerating it if it is missing or stale.
+
+   The specs embed an absolute path to the linker shim, so they are generated
+   rather than committed -- a checked-in spec would carry whatever home
+   directory it was built in and break on every other machine. Regenerating
+   when the recorded linker no longer exists also covers the case where the
+   repo was moved or renamed after a previous build.
+   """
+   spec = os.path.join(TARGETS, f"{arch}-unknown-cosmo.json")
+   stale = True
+   if os.path.exists(spec):
+      try:
+         with open(spec) as f:
+            linker = json.load(f).get("linker", "")
+         stale = not (linker and os.path.exists(linker))
+      except (OSError, json.JSONDecodeError):
+         stale = True
+   if stale:
+      print(f"cargo-cosmo: generating target specs", file=sys.stderr)
+      gen = os.path.join(REPO, "tools", "gen-target-specs.py")
+      if subprocess.call([sys.executable, gen]) != 0:
+         die("could not generate target specs")
+   return spec
+
+
+def die(msg):
+   print(f"cargo-cosmo: {msg}", file=sys.stderr)
+   sys.exit(1)
+
+
+def build_arch(arch, profile, extra):
+   """Run cargo for one arch; return {bin_name: path} for every executable."""
+   spec = ensure_spec(arch)
+
+   # No explicit +toolchain: that would override rust-toolchain.toml and pull
+   # whatever nightly happens to be newest, which is exactly the drift the pin
+   # exists to prevent. CARGO_COSMO_TOOLCHAIN forces one when you want to test
+   # against a different nightly.
+   cmd = ["cargo"]
+   if os.environ.get("CARGO_COSMO_TOOLCHAIN"):
+      cmd.append("+" + os.environ["CARGO_COSMO_TOOLCHAIN"])
+   cmd += ["build", *CARGO_Z, "--target", spec,
+           "--message-format=json-render-diagnostics"]
+   if profile == "release":
+      cmd.append("--release")
+   cmd += extra
+
+   print(f"cargo-cosmo: building {arch}", file=sys.stderr)
+   proc = subprocess.run(cmd, capture_output=True, text=True)
+   if proc.returncode != 0:
+      sys.stderr.write(proc.stderr)
+      die(f"{arch} build failed")
+
+   out = {}
+   for line in proc.stdout.splitlines():
+      try:
+         msg = json.loads(line)
+      except json.JSONDecodeError:
+         continue
+      if msg.get("reason") == "compiler-artifact" and msg.get("executable"):
+         out[msg["target"]["name"]] = msg["executable"]
+   return out
+
+
+def apelink(name, per_arch, outdir):
+   out = os.path.join(outdir, f"{name}.com")
+   cmd = ape(
+      os.path.join(BIN, "apelink"),
+      "-V", "-1",                                  # support every OS cosmo knows
+      "-l", os.path.join(BIN, "ape-x86_64.elf"),
+      "-l", os.path.join(BIN, "ape-aarch64.elf"),
+      "-M", os.path.join(BIN, "ape-m1.c"),         # Apple silicon bootstrap
+      "-o", out,
+   ) + [per_arch[a] for a in ARCHES]
+
+   proc = subprocess.run(cmd, capture_output=True, text=True)
+   if proc.returncode != 0:
+      sys.stderr.write(proc.stdout + proc.stderr)
+      die(f"apelink failed for {name}")
+
+   # cosmocc always verifies the PE half; a malformed one fails only on Windows,
+   # which is the platform you are least likely to be testing on.
+   chk = subprocess.run(ape(os.path.join(BIN, "pecheck"), out),
+                        capture_output=True, text=True)
+   if chk.returncode != 0:
+      sys.stderr.write(chk.stdout + chk.stderr)
+      die(f"pecheck rejected {out}")
+   return out
+
+
+def cmd_build(profile, extra):
+   built = {arch: build_arch(arch, profile, extra) for arch in ARCHES}
+
+   common = set(built[ARCHES[0]]) & set(built[ARCHES[1]])
+   if not common:
+      die("no executable built for both architectures")
+   for arch in ARCHES:
+      for name in set(built[arch]) - common:
+         print(f"cargo-cosmo: warning: {name!r} built for {arch} only, skipping",
+               file=sys.stderr)
+
+   outdir = os.path.join("target", "cosmo")
+   os.makedirs(outdir, exist_ok=True)
+
+   results = []
+   for name in sorted(common):
+      per_arch = {a: built[a][name] for a in ARCHES}
+      out = apelink(name, per_arch, outdir)
+      size = os.path.getsize(out)
+      print(f"cargo-cosmo: {out}  ({size:,} bytes, x86_64+aarch64)")
+      results.append(out)
+   return results
+
+
+def main(argv):
+   # Tolerate both `cargo cosmo build` and a direct `cargo-cosmo build`.
+   if argv and argv[0] == "cosmo":
+      argv = argv[1:]
+   if not argv:
+      argv = ["build"]
+
+   sub, rest = argv[0], argv[1:]
+
+   if sub == "clean":
+      shutil.rmtree(os.path.join("target", "cosmo"), ignore_errors=True)
+      return subprocess.call(["cargo", "clean"])
+
+   if sub not in ("build", "run"):
+      die(f"unknown subcommand {sub!r} (expected build, run or clean)")
+
+   profile = "release" if "--release" in rest else "debug"
+   rest = [a for a in rest if a != "--release"]
+
+   # Anything after `--` belongs to the program, not to cargo.
+   prog_args = []
+   if "--" in rest:
+      i = rest.index("--")
+      rest, prog_args = rest[:i], rest[i + 1:]
+
+   outs = cmd_build(profile, rest)
+
+   if sub == "run":
+      if len(outs) != 1:
+         die(f"`run` needs exactly one binary, built {len(outs)}")
+      return subprocess.call(ape(outs[0], *prog_args))
+   return 0
+
+
+if __name__ == "__main__":
+   sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,11 @@
+toolchain/
+target/
+*.com
+*.com.dbg
+*.aarch64.elf
+.objdump.tmp
+
+# Generated: these embed an absolute path to the linker shim, so committing one
+# would hard-code whichever machine it was built on. cargo-cosmo regenerates
+# them on demand.
+targets/*.json

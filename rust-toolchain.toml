@@ -1,0 +1,13 @@
+# Pinned exactly, same reasoning as softer_gui's stable pin -- but this one has
+# to be nightly, not by preference. Building a cosmo APE needs -Zbuild-std (std
+# is not shipped prebuilt for a custom target), -Zjson-target-spec, and custom
+# JSON target specs, none of which exist on stable.
+#
+# Custom target specs are unstable by construction and their schema shifts
+# between nightlies; two separate validation breaks showed up while this repo
+# was written. Bump deliberately, with tests/run-all.sh green, never via
+# `rustup update`.
+[toolchain]
+channel = "nightly-2026-08-23"
+components = ["rust-src"]
+profile = "minimal"

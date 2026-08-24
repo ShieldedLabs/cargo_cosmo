@@ -1,0 +1,8 @@
+[package]
+name = "cosmo-compat"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "cosmo_compat"
+path = "src/lib.rs"

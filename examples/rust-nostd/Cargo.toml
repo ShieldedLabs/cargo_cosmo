@@ -1,0 +1,13 @@
+[package]
+name = "rust-nostd-ape"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "nostd"
+path = "src/main.rs"
+
+[profile.dev]
+panic = "abort"
+[profile.release]
+panic = "abort"

@@ -1,0 +1,79 @@
+#!/bin/sh
+# Link a rustc-produced object set into a cosmopolitan ELF for one architecture.
+#
+# rustc drives this as its `linker` with gnu-cc flavor, so it hands us a GCC
+# command line aimed at a normal musl toolchain. Two things have to happen:
+# strip the args that fight cosmo's model, and inject cosmo's CRT, linker
+# script and libc in the right order.
+#
+# Invoked as cosmo-ld-x86_64 / cosmo-ld-aarch64; the suffix selects the arch.
+
+set -e
+
+ARCH=${0##*/cosmo-ld-}
+REPO=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+BIN="$REPO/toolchain/cosmocc/bin"
+LIB="$REPO/toolchain/cosmocc/$ARCH-linux-cosmo/lib"
+CC="$BIN/$ARCH-linux-cosmo-gcc"
+
+[ -x "$CC" ] || { echo "cosmo-ld: no compiler at $CC" >&2; exit 1; }
+
+# Mirrors LDFLAGS/LDFLAGS_$ARCH in toolchain/cosmocc/bin/cosmocc. Kept in the
+# same order so a diff against that script stays readable when cosmo updates.
+COMMON="-static -nostdlib -no-pie -fuse-ld=bfd -Wl,-z,noexecstack -Wl,-z,norelro -Wl,--gc-sections -L$LIB"
+case "$ARCH" in
+   x86_64)
+      CRT="$LIB/ape.o $LIB/crt.o"
+      ARCHFLAGS="-Wl,-T,$LIB/ape.lds -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=16384"
+      ;;
+   aarch64)
+      # No ape.o here: the aarch64 half is a plain ELF that apelink embeds.
+      CRT="$LIB/crt.o"
+      ARCHFLAGS="-Wl,-T,$LIB/aarch64.lds -Wl,-z,common-page-size=16384 -Wl,-z,max-page-size=16384"
+      ;;
+   *)
+      echo "cosmo-ld: unsupported arch '$ARCH'" >&2; exit 1 ;;
+esac
+
+OUTPUT=
+ARGS=
+
+while [ $# -gt 0 ]; do
+   arg=$1
+   case "$arg" in
+      # Capture the output path; we re-emit it ourselves so the CRT objects can
+      # be placed immediately after it, ahead of every user object.
+      -o) OUTPUT=$2; shift ;;
+      -o*) OUTPUT=${arg#-o} ;;
+
+      # cosmo is non-PIE by construction.
+      -pie|-Wl,-pie|-Wl,--pic-executable) ;;
+
+      # cosmocc links -z norelro; rustc's musl default asks for the opposite.
+      # rustc emits these both separately and pre-joined as one -Wl,a,b,c arg.
+      -Wl,-z,relro*|-Wl,-z,now*|-Wl,-z,defs) ;;
+
+      # -lcosmo supplies libc, libm, pthreads, dl and the compiler runtime.
+      # Letting any of these through pulls in host musl and duplicates symbols.
+      -lc|-lm|-ldl|-lrt|-lutil|-lpthread|-lgcc|-lgcc_s|-lunwind) ;;
+
+      # We force bfd and static linkage below.
+      -fuse-ld=*|-Wl,-Bdynamic|-shared|-rdynamic) ;;
+
+      # Already implied by -nostdlib.
+      -nodefaultlibs|-nostartfiles|-nostdlib) ;;
+
+      *) ARGS="$ARGS $arg" ;;
+   esac
+   shift
+done
+
+[ -n "$OUTPUT" ] || { echo "cosmo-ld: no -o in link line" >&2; exit 1; }
+
+# shellcheck disable=SC2086  # word splitting is the point for these flag sets
+"$CC" -o "$OUTPUT" $CRT $COMMON $ARCHFLAGS $ARGS -lcosmo
+
+# cosmocc runs this on every linked image; it rewrites the ELF into the shape
+# apelink and the APE loader expect. Skipping it produces a binary that links
+# cleanly and then crashes on start.
+"$BIN/fixupobj" "$OUTPUT"
