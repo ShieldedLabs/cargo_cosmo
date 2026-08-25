@@ -3,5 +3,12 @@
 version = 4
 
 [[package]]
+name = "cosmo-compat"
+version = "1.0.0"
+
+[[package]]
 name = "syscon-probe"
 version = "0.1.0"
+dependencies = [
+ "cosmo-compat",
+]

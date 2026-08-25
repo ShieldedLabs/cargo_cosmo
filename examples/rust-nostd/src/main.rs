@@ -2,6 +2,10 @@
 #![no_std]
 #![no_main]
 
+// Wrapped symbols are demanded on every cosmo link, no_std included; the shim
+// is core-only so it costs this binary nothing but the translators.
+extern crate cosmo_compat as _;
+
 use core::panic::PanicInfo;
 
 extern "C" {

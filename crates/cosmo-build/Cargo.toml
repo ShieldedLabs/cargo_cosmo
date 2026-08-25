@@ -1,0 +1,26 @@
+[package]
+name = "cosmo-build"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.74"
+license = "MIT"
+description = "Build a Rust crate into a fat Actually Portable Executable from its build.rs — one file that runs on x86-64 and arm64"
+repository = "https://github.com/ShieldedLabs/cargo_cosmo"
+documentation = "https://docs.rs/cosmo-build"
+readme = "README.md"
+keywords = ["ape", "cosmopolitan", "portable", "cross-compile", "build-dependencies"]
+categories = ["development-tools::build-utils", "os"]
+include = ["src/**", "assets/**", "README.md", "LICENSE", "Cargo.toml"]
+
+[dependencies]
+# Both are here so a consuming project needs no system tools: cosmocc is
+# ~440MB of zip fetched over TLS, and shelling out to curl/unzip would put that
+# burden on every machine that builds the crate.
+ureq = "3"
+sha2 = "0.11"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+
+[package.metadata.docs.rs]
+# The interesting targets are custom JSON specs docs.rs cannot build; the API
+# is host-buildable and that is what gets documented.
+all-features = true

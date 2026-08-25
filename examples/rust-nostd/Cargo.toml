@@ -11,3 +11,6 @@ path = "src/main.rs"
 panic = "abort"
 [profile.release]
 panic = "abort"
+
+[dependencies]
+cosmo-compat = { path = "../../crates/cosmo-compat" }

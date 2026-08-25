@@ -1,7 +1,16 @@
 [package]
 name = "cosmo-compat"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
+rust-version = "1.74"
+license = "MIT"
+description = "Libc shims where Cosmopolitan and Rust's std disagree — link it into a cosmo target and the fixes apply themselves"
+repository = "https://github.com/ShieldedLabs/cargo_cosmo"
+documentation = "https://docs.rs/cosmo-compat"
+readme = "README.md"
+keywords = ["ape", "cosmopolitan", "libc", "shim", "portable"]
+categories = ["no-std", "os", "external-ffi-bindings"]
+include = ["src/**", "wrap.txt", "README.md", "LICENSE", "Cargo.toml"]
 
 [lib]
 name = "cosmo_compat"

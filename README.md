@@ -164,6 +164,9 @@ crates/
   cosmo-compat         libc shims where cosmo and std disagree
 examples/    c-hello, rust-nostd, rust-std, syscon-probe, cross-os-probe
 tests/       run-all.sh
+crates/
+  cosmo-build          build-dependency: the whole APE build from a build.rs
+templates/   build.sh, build.rs -- drop-in bootstrap, no dependency on the crates
 ```
 
 ## Setup
@@ -181,6 +184,137 @@ cd ../.. && python3 tools/gen-target-specs.py
 export PATH="$PWD/tools:$PATH"
 ./tests/run-all.sh
 ```
+
+## Using it on your own project
+
+Nothing has to be installed first. Whichever route you pick, the first build
+fetches these tools, the pinned nightly (`rust-src` included) and cosmocc into
+a shared cache outside the tree, so a second project costs no disk.
+`COSMO_HOME=<dir>` moves the cache, `COSMO_REF=<tag|sha>` pins the tools.
+
+One thing is common to every route: the shim has to be in the crate graph, or
+the link fails with a hundred undefined `__wrap_*` references. Scoping it to
+`cfg(cosmo)`, which `cargo-cosmo` sets, keeps ordinary builds untouched.
+
+```toml
+[target.'cfg(cosmo)'.dependencies]
+cosmo-compat = "1"
+
+[lints.rust]                                    # optional: quiet the warning
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
+```
+
+```rust
+#[cfg(cosmo)]
+extern crate cosmo_compat as _;
+```
+
+### As a feature flag
+
+`crates/cosmo-build` makes the APE a build of its own. The build-dependency is
+optional, so with the feature off it is never even compiled:
+
+```toml
+[features]
+ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
+
+[build-dependencies]
+cosmo-build = { version = "1", optional = true }
+```
+
+```rust
+// build.rs
+fn main() {
+   #[cfg(feature = "ape")]
+   cosmo_build::apeify();
+}
+```
+
+```
+cargo build           ordinary host build
+cargo build -F ape    host build + target/cosmo/<name>.com
+```
+
+Drop the feature and the `optional` and every `cargo build` produces an APE --
+that is the whole of an "always APE" project, no features table at all.
+
+Two catches, both inherent to build scripts. Cargo captures their output, so
+the two-architecture build is silent until it fails, and the nested build needs
+its own target directory (~190MB) because the outer cargo holds an exclusive
+lock on `target/`. And `cargo check`, `cargo test` and `cargo clippy` all run
+build scripts, so an always-on project would build an APE on every check-on-save.
+`apeify` therefore skips check and clippy builds -- see `is_metadata_only`,
+which infers it because cargo exposes no flag -- and `COSMO_APE=0` turns it off
+wholesale for an editor that guesses wrong. `cargo test` is indistinguishable
+from `cargo build` in a build script's environment, so that one still builds.
+Call `build_ape` instead of `apeify` to skip the policy entirely.
+
+rust-analyzer is covered by that: both the command it runs to discover build
+scripts and its check-on-save default are `cargo check` invocations, which the
+detector sees. It is not covered if you have pointed
+`rust-analyzer.cargo.buildScripts.overrideCommand` or `check.overrideCommand`
+at something built on `cargo build` -- that is indistinguishable from a real
+build by construction. For an always-on project, the belt-and-braces setting is
+
+```json
+"rust-analyzer.cargo.extraEnv": { "COSMO_APE": "0" }
+```
+
+which is a switch rather than a heuristic.
+
+Rebuilds are incremental: each architecture keeps its own incremental cache in
+the nested target dir, std is compiled once, and a one-line edit relinks both
+halves and the APE in about a second. Every `cargo build` pays roughly that
+much even when nothing changed, because the build script has to re-run to
+notice.
+
+The crate needs `rustup` and `/bin/sh` and nothing else: the toolchains are
+fetched with `ureq` and unpacked with the `zip` crate rather than by shelling
+out, so no python, git, curl or unzip has to exist on the build host. `/bin/sh`
+is unavoidable -- cosmocc's own tools are APEs and the kernel cannot exec one
+directly.
+
+## What gets downloaded
+
+Three things, once, then never again -- the cache is shared by every project on
+the machine and nothing is fetched on a warm build.
+
+| from | what | size | verified by |
+|---|---|---|---|
+| crates.io | `cosmo-build`, `cosmo-compat` and 45 transitive crates (`ureq`, `zip`, `sha2` and their trees) | ~5MB | cargo's registry checksums |
+| static.rust-lang.org | the pinned nightly plus `rust-src`, via rustup, only if not already installed | ~1.6GB on disk | rustup's signed manifests |
+| cosmo.zip | `cosmocc-4.0.2.zip` | 441,763,966 bytes (~1.4GB unpacked) | SHA-256 pinned in the crate |
+
+`https://cosmo.zip/pub/cosmocc/cosmocc-4.0.2.zip` is the only URL this crate
+itself will open, and it is pinned to a *versioned* release rather than the
+moving `cosmocc.zip`, so a build in a year fetches the compiler these results
+were measured against. Its SHA-256 is checked before anything is unpacked --
+including from a mirror, since a mirror is only a different route to the same
+bytes. A mismatch deletes the download and fails the build.
+
+`COSMO_COSMOCC_URL` points the fetch at a mirror or an internal cache;
+`COSMO_COSMOCC_SHA256` is how you run a different cosmocc deliberately.
+
+### As a script
+
+`templates/build.sh` is the same bootstrap as a shell script, for a project that
+would rather not take a build-dependency -- and it lets you watch the build,
+which the crate route cannot. It clones this repo and drives the Python tools in
+`tools/`, so unlike the crate it does want git, curl, unzip and python3:
+
+```sh
+curl -sSLo build.sh https://raw.githubusercontent.com/ShieldedLabs/cargo_cosmo/main/templates/build.sh
+chmod +x build.sh
+./build.sh --release      # -> target/cosmo/<name>.com
+```
+
+`templates/build.rs` is the middle option: the feature-flag behaviour with the
+guardrails vendored, for a project that wants `cargo build` to be the only
+command but no dependency on this repo.
+
+There is no `cargo install` step in any of them. The driver resolves its own
+repo from its path, so `PATH="$COSMO_HOME/tools:$PATH"; cargo cosmo build`
+works too, in any directory, once the cache exists.
 
 ## Design notes worth knowing
 

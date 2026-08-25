@@ -73,8 +73,14 @@ ARCH = {
 
 
 def spec_for(base):
+   # Honour the same toolchain override cargo-cosmo uses. Bare `rustc` is
+   # whatever the *consuming* project's rust-toolchain.toml selects, which off
+   # nightly rejects -Z and leaves the caller with a traceback instead of a
+   # spec -- the failure mode for driving an external crate from a fresh clone.
+   tc = os.environ.get("CARGO_COSMO_TOOLCHAIN")
+   rustc = ["rustup", "run", tc, "rustc"] if tc else ["rustc"]
    out = subprocess.run(
-      ["rustc", "-Z", "unstable-options",
+      [*rustc, "-Z", "unstable-options",
        "--target", base, "--print", "target-spec-json"],
       capture_output=True, text=True, check=True)
    return json.loads(out.stdout)

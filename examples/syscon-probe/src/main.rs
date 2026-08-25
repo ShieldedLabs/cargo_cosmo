@@ -12,6 +12,9 @@
 //! The same binary on macOS or Windows is where the columns come apart, and
 //! data/syscon-*.json records by how much.
 
+// cosmo-ld wraps 123 libc symbols on every cosmo link; the translators live
+// here, and without them the link fails on undefined __wrap_*.
+extern crate cosmo_compat as _;
 macro_rules! probe {
    ($($name:ident : $baked:expr),* $(,)?) => {
       extern "C" { $(static $name: core::ffi::c_int;)* }

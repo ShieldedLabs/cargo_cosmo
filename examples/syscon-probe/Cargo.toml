@@ -6,3 +6,6 @@ edition = "2021"
 [[bin]]
 name = "syscon-probe"
 path = "src/main.rs"
+
+[dependencies]
+cosmo-compat = { path = "../../crates/cosmo-compat" }

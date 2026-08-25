@@ -5,6 +5,10 @@
 //! libcosmo.a, because an archive member is only pulled in to satisfy a symbol
 //! that is still undefined.
 
+// no_std so one shim serves both worlds: cosmo-ld wraps 123 libc symbols on
+// every cosmo link, so even a no_std binary has to supply the translators, and
+// nothing here needs more than core.
+#![cfg_attr(not(test), no_std)]
 use core::ffi::{c_char, c_int};
 
 // Stage-2 normalization (docs/DESIGN.md): translate OS constants at the libc
