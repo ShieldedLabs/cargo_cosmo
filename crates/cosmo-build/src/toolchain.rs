@@ -102,6 +102,7 @@ pub fn ensure_cosmocc(cache: &Cache) -> Result<(), String> {
 
    unzip(&zip, &cache.cosmocc)?;
    let _ = fs::remove_file(&zip);
+   assimilate(&cache.cosmocc)?;
 
    if !cache.bin("apelink").exists() {
       return Err(format!(
@@ -110,6 +111,106 @@ pub fn ensure_cosmocc(cache: &Cache) -> Result<(), String> {
       ));
    }
    Ok(())
+}
+
+/// Rewrite cosmocc's own binaries from APEs into native executables.
+///
+/// cosmocc ships every tool as an APE, and the kernel cannot exec one. A shell
+/// can, which is why running apelink through `sh` works -- but only a shell
+/// that parses the APE header the way cosmo's loader expects. `/bin/sh` is dash
+/// on Debian and Ubuntu, which does not, and gcc's own `posix_spawnp` of `ld`,
+/// `as` and `cc1` has no shell in the loop at all: it fails with "cannot
+/// execute 'ld'", which rustc reports as a *warning* and still exits 0, so the
+/// build succeeds and produces no binary.
+///
+/// Converting the toolchain once, here, means nothing downstream has to care:
+/// every tool is then a native ELF that execs directly.
+fn assimilate(cosmocc: &Path) -> Result<(), String> {
+   let tool = cosmocc.join("bin").join("assimilate");
+   if !tool.exists() {
+      return Err(format!("no {} in the toolchain", tool.display()));
+   }
+
+   let mut done = 0;
+   for path in walk(cosmocc) {
+      // Data, not programs: object files, archives, linker scripts, headers.
+      let skip = matches!(
+         path.extension().and_then(|e| e.to_str()),
+         Some("elf" | "a" | "o" | "h" | "c" | "lds")
+      );
+      // assimilate keeps the original beside its work; converting those too
+      // leaves .bak.bak and duplicates the toolchain on every pass.
+      let is_bak = path.to_string_lossy().contains(".bak");
+      // Rewriting the converter while it is the thing doing the converting is
+      // not worth the risk; nothing execs it after this.
+      if skip || is_bak || path == tool || !is_ape(&path) {
+         continue;
+      }
+
+      let ok = shell_exec(&tool, &path)?;
+      if ok {
+         done += 1;
+         // The backup is a second copy of a 1.4GB toolchain, and the download
+         // it came from is reproducible.
+         let bak = path.with_extension(match path.extension() {
+            Some(e) => format!("{}.bak", e.to_string_lossy()),
+            None => "bak".to_string(),
+         });
+         let _ = fs::remove_file(&bak);
+         let _ = fs::remove_file(path.with_file_name(format!(
+            "{}.bak",
+            path.file_name().unwrap_or_default().to_string_lossy()
+         )));
+      }
+   }
+   if done == 0 {
+      return Err("assimilate converted nothing; the toolchain is unusable as it is".into());
+   }
+   Ok(())
+}
+
+/// Run an APE that has not been assimilated yet.
+///
+/// The shell is what makes this possible at all, and it has to be one that
+/// parses the APE header: bash does, dash does not, and `/bin/sh` is dash on
+/// Debian and Ubuntu. This is the only place an unconverted APE is launched --
+/// after `assimilate` has run, everything is native.
+fn shell_exec(tool: &Path, arg: &Path) -> Result<bool, String> {
+   let shell = ["/bin/bash", "/usr/bin/bash", "/bin/sh"]
+      .into_iter()
+      .find(|s| Path::new(s).exists())
+      .ok_or("no shell found to run the APE toolchain")?;
+   let out = Command::new(shell)
+      .arg(tool)
+      .arg(arg)
+      .output()
+      .map_err(|e| format!("{shell} {}: {e}", tool.display()))?;
+   Ok(out.status.success())
+}
+
+fn is_ape(path: &Path) -> bool {
+   let mut buf = [0u8; 4];
+   match File::open(path).and_then(|mut f| std::io::Read::read_exact(&mut f, &mut buf)) {
+      Ok(()) => buf == *b"MZqF",
+      Err(_) => false,
+   }
+}
+
+fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
+   let mut out = Vec::new();
+   let mut stack = vec![dir.to_path_buf()];
+   while let Some(d) = stack.pop() {
+      let Ok(entries) = fs::read_dir(&d) else { continue };
+      for e in entries.flatten() {
+         let p = e.path();
+         match e.file_type() {
+            Ok(t) if t.is_dir() => stack.push(p),
+            Ok(t) if t.is_file() => out.push(p),
+            _ => {}
+         }
+      }
+   }
+   out
 }
 
 fn unzip(zip: &Path, into: &Path) -> Result<(), String> {
@@ -132,6 +233,23 @@ fn unzip(zip: &Path, into: &Path) -> Result<(), String> {
       if let Some(parent) = path.parent() {
          fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
       }
+
+      // 38 entries in cosmocc.zip are symlinks -- bin/*-as, *-cpp, *-ld.bfd and
+      // friends pointing at libexec or at each other. An extractor that writes
+      // them as regular files produces text files holding a path, which exec
+      // cannot run. It goes unnoticed because the entries that matter most
+      // resolve by another route, so the toolchain half-works.
+      #[cfg(unix)]
+      if entry.unix_mode().map(|m| m & 0xf000 == 0xa000).unwrap_or(false) {
+         let mut target = String::new();
+         std::io::Read::read_to_string(&mut entry, &mut target)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+         let _ = fs::remove_file(&path);
+         std::os::unix::fs::symlink(&target, &path)
+            .map_err(|e| format!("{} -> {target}: {e}", path.display()))?;
+         continue;
+      }
+
       let mut out = File::create(&path).map_err(|e| format!("{}: {e}", path.display()))?;
       io::copy(&mut entry, &mut out).map_err(|e| format!("{}: {e}", path.display()))?;
       drop(out);
