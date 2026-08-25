@@ -69,42 +69,47 @@ FIXED IN THIS PASS
    import once, let a macro emit either a real #[link] import or a dlsym'd wrapper
    with the right ABI) and a pointer to softer_gui's src/sys_win.rs.
 
-6. --wrap WAS PASSED WITHOUT THE SHIM BEING LINKED   (found while testing 1-5)
-   Not on the original list, because it is not Windows-specific: it broke the
-   suite everywhere. cosmo-ld added -Wl,--wrap=NAME for every name in wrap.txt
-   whenever the file existed, but --wrap rewrites references inside libcosmo too,
-   so a crate that does not depend on cosmo-compat got undefined __wrap_mmap,
-   __wrap_clock_gettime and the rest. examples/syscon-probe is such a crate, and
-   so is any crate built without a `cosmo` feature.
-   FIX: cosmo-ld only passes the wrap list when cosmo_compat is actually in the
-   link line. tests/run-all.sh: 13 passed, 0 failed (it did not build before).
+6. --wrap WITHOUT THE SHIM LINKED   (found while testing 1-5; FIXED UPSTREAM,
+   MY CHANGE WITHDRAWN)
+   Not Windows-specific: examples/syscon-probe did not depend on cosmo-compat,
+   cosmo-ld passed -Wl,--wrap=NAME for every name in wrap.txt regardless, --wrap
+   rewrites references inside libcosmo too, and the link died on undefined
+   __wrap_mmap and friends. The suite did not build.
+
+   I first guarded the wrap list on cosmo_compat being present in the link line.
+   That was the wrong fix and it is not in this branch. Upstream's model is that
+   the shim is mandatory, which the README now states, and syscon-probe has since
+   been given the dependency. Guarding the flags would turn a loud link error
+   into a binary whose constants are silently untranslated off Linux, and a
+   missing shim is exactly the case where you most want to be told.
+
+
+================================================================================
+RESOLVED SINCE: IT WAS THE GRAPHICS DRIVER
+================================================================================
+
+7. D3D11 TAKES AN int3 INSIDE d3d11.dll — ROOT-CAUSED, WORKAROUND IN HAND
+   D3D11CreateDevice with D3D_DRIVER_TYPE_HARDWARE raises STATUS_BREAKPOINT from
+   inside an APE and never returns. The same call with D3D_DRIVER_TYPE_WARP
+   succeeds and drives the full flip-model path. So the thing that objects to a
+   cosmo process is the VENDOR user-mode driver initialising (NVIDIA here), not
+   D3D11, not cosmo_dlopen and not the ABI. Nothing in cosmo needs changing;
+   softer_gui now asks an APE for WARP and measures 360 of 360 frame intervals at
+   exactly one refresh period with -0.0 ms drift.
+
+   Still unknown, and only worth chasing if a GPU-side APE is ever wanted: what
+   the driver is reacting to. Cosmo installs a vectored exception handler, which
+   runs before SEH frame handlers, so a first-chance exception the driver means to
+   handle itself would become fatal. That is a hypothesis, not a measurement.
+
+   Worth retesting on AMD and Intel: SOFTER_GUI_D3D_DRIVER=hardware forces it.
 
 
 ================================================================================
 STILL OPEN
 ================================================================================
 
-7. D3D11 TAKES AN int3 INSIDE d3d11.dll
-   The only Windows API found so far that does not work. A cosmo process that
-   LoadLibraryW's d3d11.dll and calls D3D11CreateDevice raises STATUS_BREAKPOINT
-   (0x80000003) before returning a device. Measured precisely: LoadLibraryW
-   succeeds, GetProcAddress succeeds, the call never returns. The trap address is
-   identical across runs while d3d11.dll's base moves, which points at a system
-   DLL rather than d3d11 itself, and is consistent with cosmo's vectored exception
-   handler turning a first-chance exception the runtime meant to handle into a
-   fatal signal. That last part is a hypothesis, not a measurement.
-
-   user32, gdi32, kernel32 and dwmapi are all fine through the same mechanism, and
-   a full GDI window with vblank-accurate pacing runs on the APE without trouble.
-   Other suspicion, untested: D3D11 makes its own threads and leans on TLS, and
-   the target specs set has-thread-local: false.
-
-   Next concrete step if this is ever worth chasing: print the loaded module bases
-   immediately before the call and identify which module the trap address is in.
-   cosmo already imports psapi, so it is cheap.
-
-   softer_gui simply defaults its APE builds to the GDI presenter and keeps the
-   D3D one for native Windows, where it works.
+(nothing blocking)
 
 
 ================================================================================
