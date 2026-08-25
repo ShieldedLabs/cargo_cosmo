@@ -34,7 +34,7 @@ cargo publish --manifest-path crates/cosmo-compat/Cargo.toml
 cargo publish --manifest-path crates/cosmo-build/Cargo.toml
 
 # 5. tag, so the version is recoverable from the repo
-git tag -a v3.0.0 -m 'cosmo-build/cosmo-compat 3.0.0' && git push --tags
+git tag -a v4.0.0 -m 'cosmo-build/cosmo-compat 4.0.0' && git push --tags
 ```
 
 ## What docs.rs will show

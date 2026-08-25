@@ -13,13 +13,13 @@
 //! ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 //!
 //! [build-dependencies]
-//! cosmo-build = { version = "3", optional = true }
+//! cosmo-build = { version = "4", optional = true }
 //!
 //! # The shim has to be in the crate graph or the link fails with a hundred
 //! # undefined __wrap_* references. cfg(cosmo) is set only by this crate, so
 //! # ordinary builds neither resolve nor compile it.
 //! [target.'cfg(cosmo)'.dependencies]
-//! cosmo-compat = "3"
+//! cosmo-compat = "4"
 //!
 //! [lints.rust]
 //! unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
