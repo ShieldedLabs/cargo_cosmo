@@ -109,7 +109,24 @@ RESOLVED SINCE: IT WAS THE GRAPHICS DRIVER
 STILL OPEN
 ================================================================================
 
-(nothing blocking)
+8. cosmo-build: THE SILENT LINK FAILURE IS STILL UNGUARDED
+   The toolchain half of this is fixed upstream in c706b73, which assimilates the
+   cached cosmocc and handles the .bak copies. What is not yet guarded is the
+   reporting: when a link produces nothing, the first symptom is still a panic
+   from much later, naming a file rather than a cause.
+
+     cosmo-build: apelink failed for demo:
+     .../x86_64-unknown-cosmo/release/demo: No such file or directory
+
+   That was item 3 here, fixed in tools/cargo-cosmo by stat-ing every path cargo
+   reports and dying there with the arch, the artifact and the likely cause. The
+   same check belongs where cosmo-build collects its artifacts, because rustc
+   reports a failed link as a warning and exits 0, so cargo will keep saying
+   Finished with nothing built for reasons other than the toolchain.
+
+   Also worth knowing, and not cosmo's fault: the APE cannot be built from
+   Windows at all. The linker is a shell script and Windows answers
+   "%1 is not a valid Win32 application (os error 193)". Linux or WSL only.
 
 
 ================================================================================
