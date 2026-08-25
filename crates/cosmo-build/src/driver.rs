@@ -9,12 +9,17 @@ pub const ARCHES: [&str; 2] = ["x86_64", "aarch64"];
 
 /// Build every executable in this package for both architectures and fuse each
 /// pair into an APE. Returns the paths written.
-pub fn build(cache: &Cache, manifest_dir: &Path, release: bool) -> Result<Vec<PathBuf>, String> {
+pub fn build(
+   cache: &Cache,
+   manifest_dir: &Path,
+   release: bool,
+   args: &[&str],
+) -> Result<Vec<PathBuf>, String> {
    let specs = cache.materialize()?;
 
    let mut per_arch = Vec::new();
    for (arch, spec) in ARCHES.iter().zip(specs.iter()) {
-      per_arch.push(cargo(arch, spec, manifest_dir, release)?);
+      per_arch.push(cargo(arch, spec, manifest_dir, release, args)?);
    }
 
    // Only fuse binaries that exist on both sides; an example built for one
@@ -43,6 +48,7 @@ fn cargo(
    spec: &Path,
    manifest_dir: &Path,
    release: bool,
+   args: &[&str],
 ) -> Result<Vec<(String, PathBuf)>, String> {
    let mut cmd = Command::new("rustup");
    cmd.args(["run", CHANNEL.trim(), "cargo", "build"]);
@@ -59,6 +65,11 @@ fn cargo(
    if release {
       cmd.arg("--release");
    }
+
+   // Whatever the caller wants selected: --example, --bin, --features, ...
+   // A library crate has no bins at all, so `--example demo` is the difference
+   // between an APE and "no executable was built for both architectures".
+   cmd.args(args);
 
    // Two profile settings produce APEs that misbehave off Linux, and because
    // -Zbuild-std compiles std with the crate's own profile they take std down

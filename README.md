@@ -198,7 +198,7 @@ the link fails with a hundred undefined `__wrap_*` references. Scoping it to
 
 ```toml
 [target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "1"
+cosmo-compat = "2"
 
 [lints.rust]                                    # optional: quiet the warning
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -219,7 +219,7 @@ optional, so with the feature off it is never even compiled:
 ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 
 [build-dependencies]
-cosmo-build = { version = "1", optional = true }
+cosmo-build = { version = "2", optional = true }
 ```
 
 ```rust

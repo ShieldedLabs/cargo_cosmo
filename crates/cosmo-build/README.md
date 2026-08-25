@@ -13,10 +13,10 @@ two ELFs with `apelink`, which is what cosmocc does for C.
 ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 
 [build-dependencies]
-cosmo-build = { version = "1", optional = true }
+cosmo-build = { version = "2", optional = true }
 
 [target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "1"
+cosmo-compat = "2"
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }

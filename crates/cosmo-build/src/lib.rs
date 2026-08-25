@@ -13,13 +13,13 @@
 //! ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 //!
 //! [build-dependencies]
-//! cosmo-build = { version = "1", optional = true }
+//! cosmo-build = { version = "2", optional = true }
 //!
 //! # The shim has to be in the crate graph or the link fails with a hundred
 //! # undefined __wrap_* references. cfg(cosmo) is set only by this crate, so
 //! # ordinary builds neither resolve nor compile it.
 //! [target.'cfg(cosmo)'.dependencies]
-//! cosmo-compat = "1"
+//! cosmo-compat = "2"
 //!
 //! [lints.rust]
 //! unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -138,6 +138,23 @@ pub fn wanted() -> bool {
 /// This is the one call a `build.rs` needs. Use [`build_ape`] to skip the
 /// policy and always build.
 pub fn apeify() {
+   apeify_with(&[])
+}
+
+/// [`apeify`] with extra arguments handed to each `cargo build`.
+///
+/// A library crate has no bins, so nothing is produced unless a target is
+/// named: `apeify_with(&["--example", "demo"])`. Anything `cargo build`
+/// accepts works -- `--bin`, `--features`, `--no-default-features`.
+///
+/// ```no_run
+/// // build.rs of a library whose demo lives in examples/demo.rs
+/// fn main() {
+///    #[cfg(feature = "ape")]
+///    cosmo_build::apeify_with(&["--example", "demo"]);
+/// }
+/// ```
+pub fn apeify_with(args: &[&str]) {
    // Cargo caches build-script runs, and any rerun-if-* directive REPLACES the
    // default "re-run when a package file changed". Declaring a path that never
    // exists is the only way to say "always run": without it a deleted APE is
@@ -151,7 +168,7 @@ pub fn apeify() {
    if env::var_os("COSMO_APE_INNER").is_some() || !wanted() {
       return;
    }
-   if let Err(e) = try_build_ape() {
+   if let Err(e) = try_build_ape(args) {
       panic!("cosmo-build: {e}");
    }
 }
@@ -159,10 +176,15 @@ pub fn apeify() {
 /// Build the APE whatever cargo is doing, ignoring the [`wanted`] policy but
 /// still declining to recurse. Panics on failure.
 pub fn build_ape() {
+   build_ape_with(&[])
+}
+
+/// [`build_ape`] with extra arguments handed to each `cargo build`.
+pub fn build_ape_with(args: &[&str]) {
    if env::var_os("COSMO_APE_INNER").is_some() {
       return;
    }
-   if let Err(e) = try_build_ape() {
+   if let Err(e) = try_build_ape(args) {
       panic!("cosmo-build: {e}");
    }
 }
@@ -171,7 +193,7 @@ pub fn build_ape() {
 ///
 /// Worth calling directly from a `build.rs` that wants to degrade instead of
 /// break -- warn and carry on with the host build, say.
-pub fn try_build_ape() -> Result<Vec<PathBuf>, String> {
+pub fn try_build_ape(args: &[&str]) -> Result<Vec<PathBuf>, String> {
    let manifest = PathBuf::from(
       env::var_os("CARGO_MANIFEST_DIR").ok_or("CARGO_MANIFEST_DIR is not set")?,
    );
@@ -182,7 +204,7 @@ pub fn try_build_ape() -> Result<Vec<PathBuf>, String> {
    let cache = cache::Cache::locate()?;
    toolchain::ensure_rust()?;
    toolchain::ensure_cosmocc(&cache)?;
-   driver::build(&cache, &manifest, release)
+   driver::build(&cache, &manifest, release, args)
 }
 
 #[cfg(test)]
