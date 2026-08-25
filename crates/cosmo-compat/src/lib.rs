@@ -9,7 +9,7 @@
 // every cosmo link, so even a no_std binary has to supply the translators, and
 // nothing here needs more than core.
 #![cfg_attr(not(test), no_std)]
-use core::ffi::{c_char, c_int};
+use core::ffi::{c_char, c_int, c_void};
 
 // Stage-2 normalization (docs/DESIGN.md): translate OS constants at the libc
 // boundary so a binary compiled with Linux numbering runs on the host cosmo
@@ -36,7 +36,10 @@ static KEEP_SHIMS: (
 extern "C" {
    fn strerror(errnum: c_int) -> *const c_char;
    fn strlen(s: *const c_char) -> usize;
-   fn memcpy(d: *mut c_char, s: *const c_char, n: usize) -> *mut c_char;
+   // Declared with the signature the runtime actually exports; anything else
+   // trips suspicious_runtime_symbol_definitions, and a mismatched redeclaration
+   // of a symbol the compiler may lower calls to is worth not guessing at.
+   fn memcpy(d: *mut c_void, s: *const c_void, n: usize) -> *mut c_void;
 }
 
 /// POSIX XSI `strerror_r`, which is what Rust's std actually calls.
@@ -64,7 +67,7 @@ pub unsafe extern "C" fn __xpg_strerror_r(
       return 0;
    }
    let n = core::cmp::min(strlen(msg), buflen - 1);
-   memcpy(buf, msg, n);
+   memcpy(buf.cast(), msg.cast(), n);
    *buf.add(n) = 0;
    0
 }
