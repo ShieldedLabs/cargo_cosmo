@@ -1,0 +1,12 @@
+# LF in the repository and in every checkout.
+#
+# The other half of the Windows-clone problem 94fec8d started on. That commit
+# stopped git turning tools/cosmo-ld-* into text files; this stops it turning
+# them into CRLF ones. `#!/bin/sh\r` fails with "bad interpreter", naming
+# neither git nor line endings, and every script here is on the build path:
+# the linker shims, the driver, the toolchain assimilator, the test suite.
+* text=auto eol=lf
+
+# Extracted tables and generated assets: bytes, not text to be normalised.
+*.json -text
+data/** -text
