@@ -192,6 +192,37 @@ may read `st_*` fields wrongly — unverified), `dirent`, `ioctl` argument
 structures, and anything std reaches through `syscall(2)` directly (it only
 does so for Linux-specific features it already falls back from).
 
+## Calling a host API directly, and the ABI that is not the one you asked for
+
+The shim covers what std calls. Code that reaches a host API itself -- a GUI, a
+GPU, anything behind `cosmo_dlopen` -- steps outside it, and on Windows x86-64
+there is a trap that is invisible until it crashes and then lies about the cause.
+
+An APE's target is linux. In Rust that makes `extern "system"` mean SysV:
+arguments in RDI/RSI/RDX/RCX, no shadow space. Win32 uses the Microsoft x64
+convention. Call a `cosmo_dlsym`'d user32 function through an `extern "system"`
+pointer and it arrives inside the DLL reading whatever happened to be in RCX,
+then faults there -- while holding a function pointer that is perfectly valid.
+It reads as a bad symbol or a broken dlsym, and it is neither.
+
+Everything crossing into Win32 on x86-64 needs `extern "win64"`: every imported
+function, every `GetProcAddress`'d pointer, and every callback Windows invokes,
+a window procedure being the usual one. aarch64 needs no such care, since
+Windows and Linux both use AAPCS64 there. macOS has the analogous problem for
+callbacks and solves it with `cosmo_dltramp`; the Windows side has no equivalent
+hint today, which is why this note exists.
+
+The pattern that works is to declare each import once and let a macro emit
+either a real `#[link]` import for a native build or a dlsym'd wrapper with the
+right ABI for an APE, so the call sites are identical in both. softer_gui's
+`src/sys_win.rs` does this for about seventy Win32 functions.
+
+Known not to work: `D3D11CreateDevice` raises STATUS_BREAKPOINT inside
+`d3d11.dll` before returning a device, with the ABI correct and the library
+loaded. user32, gdi32, kernel32 and dwmapi are all fine through the same
+mechanism. Unproven suspicion: D3D11 makes its own threads and leans on TLS,
+and the target specs set `has-thread-local: false`.
+
 ## What cosmo does and does not give you
 
 Cosmopolitan gives you **libc portability**, not **platform portability**. There is no

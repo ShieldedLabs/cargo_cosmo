@@ -180,10 +180,23 @@ mkdir -p toolchain && cd toolchain
 curl -sSLo cosmocc.zip https://cosmo.zip/pub/cosmocc/cosmocc.zip
 mkdir -p cosmocc && cd cosmocc && unzip -q ../cosmocc.zip
 
-cd ../.. && python3 tools/gen-target-specs.py
+cd ../..
+
+# cosmocc ships its tools as APEs, and cosmocc's gcc spawns `ld` and `as` with
+# posix_spawnp, which cannot exec one. Without this the link step fails, rustc
+# reports it as a warning, and cargo says "Finished" having built nothing.
+./tools/assimilate-toolchain.sh
+
+python3 tools/gen-target-specs.py
 export PATH="$PWD/tools:$PATH"
 ./tests/run-all.sh
 ```
+
+On WSL, note that running an APE by path hands it to Windows: binfmt_misc
+registers WSLInterop for PE images and an APE is one, so `./foo.com` starts a
+*Windows* process and any "Linux" test silently measures the wrong OS.
+`tests/run-all.sh` and `cargo cosmo run` detect this and go through
+`toolchain/cosmocc/bin/ape-$(uname -m).elf`; do the same by hand.
 
 ## Using it on your own project
 

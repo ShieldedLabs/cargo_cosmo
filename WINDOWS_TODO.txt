@@ -1,0 +1,116 @@
+================================================================================
+cargo_cosmo ON WINDOWS — WHAT WAS FOUND, WHAT IS FIXED, WHAT IS LEFT
+================================================================================
+
+Written 2026-08-25, from the first end-to-end run of this toolchain on Windows.
+Everything here was hit in practice, not read about.
+
+A fat APE built on Linux (WSL) and run natively on Windows 11 x86-64:
+
+  examples/cross-os-probe, Windows:  31 identical, 15 diverged, 0 unexpected
+  examples/cross-os-probe, Linux:    46 identical,  0 diverged, 0 unexpected
+
+Every std stage passed on Windows: stdout, heap, env::args, time, threads, file
+write+read, dir listing, tcp connect, panic + catch_unwind. The one worth calling
+out is `tcp connect -> ConnectionRefused (os error 111)`: cosmo's raw value there
+is WinSock's 10061, so crates/cosmo-compat's errno translation demonstrably fired.
+
+README rates "Runs on non-Linux OSes" as "shim built, unrun there". For Windows
+that is now out of date and can be stated as verified.
+
+
+================================================================================
+FIXED IN THIS PASS
+================================================================================
+
+1. THE TWO SYMLINKS DID NOT SURVIVE A WINDOWS CLONE   (blocked the build outright)
+   tools/cosmo-ld-{x86_64,aarch64} were git symlinks. A clone made by Windows
+   git, where core.symlinks defaults to false, writes them as text files holding
+   the link target, after which rustc fails with "could not exec the linker: Exec
+   format error" and nothing points at git or at symlinks.
+   FIX: cosmo-ld now takes the arch from COSMO_LD_ARCH when set, still falling
+   back to the argv[0] suffix, and the two wrappers are ordinary two-line files.
+
+2. THE TOOLCHAIN'S OWN APEs COULD NOT BE exec'd BY gcc
+   cosmocc ships its tools as APEs. A shell can run one, which is why cosmo-ld
+   worked, but cosmocc's gcc spawns ld, as and cc1 with posix_spawnp and the
+   kernel cannot exec an APE: "cannot execute 'ld': posix_spawnp: No such file or
+   directory". Note a mode check does not catch this; an APE is executable as far
+   as the filesystem is concerned.
+   FIX: tools/assimilate-toolchain.sh converts them in place, README's setup runs
+   it, and cargo-cosmo checks the magic first and names the script if it is still
+   an APE. Note assimilate must be exec'd directly, not via `sh`, which mis-parses
+   the APE header, and it leaves a .bak beside each file it converts, so the
+   script skips those or a second run duplicates the toolchain (measured: 1.2 GB).
+
+3. A FAILED LINK REPORTED AS SUCCESS   (this is what made 2 expensive)
+   rustc surfaces linker output through #[warn(linker_messages)] and still exits
+   0, so cargo printed "Finished" with no binary and the first sign of trouble was
+   apelink failing on a missing file several steps later.
+   FIX: build_arch stats every path cargo reports and dies there, naming the arch,
+   the artifact and the likely cause.
+
+4. TESTING "ON LINUX" FROM WSL SILENTLY TESTED WINDOWS
+   WSL registers binfmt_misc WSLInterop for PE images and an APE is one, so
+   `./foo.com` hands the file to Windows. tests/run-all.sh ran its binaries that
+   way, which means on any WSL development machine the whole suite was measuring
+   the wrong OS, without erroring.
+   FIX: run-all.sh detects WSL and routes APEs through
+   toolchain/cosmocc/bin/ape-$(uname -m).elf; cargo-cosmo's own runner does the
+   same rather than relying on the /bin/sh trampoline; README says so.
+
+5. THE CALLING CONVENTION TRAP FOR HOST APIs ON WINDOWS
+   An APE's target is linux, so in Rust `extern "system"` means SysV. Win32 wants
+   the Microsoft x64 convention, so a cosmo_dlsym'd user32 function called through
+   an `extern "system"` pointer arrives reading whatever was in RCX and faults
+   inside the DLL while holding a valid function pointer. It reads as a bad symbol
+   and is not.
+   FIX: documented in docs/DESIGN.md, with the working pattern (declare each
+   import once, let a macro emit either a real #[link] import or a dlsym'd wrapper
+   with the right ABI) and a pointer to softer_gui's src/sys_win.rs.
+
+6. --wrap WAS PASSED WITHOUT THE SHIM BEING LINKED   (found while testing 1-5)
+   Not on the original list, because it is not Windows-specific: it broke the
+   suite everywhere. cosmo-ld added -Wl,--wrap=NAME for every name in wrap.txt
+   whenever the file existed, but --wrap rewrites references inside libcosmo too,
+   so a crate that does not depend on cosmo-compat got undefined __wrap_mmap,
+   __wrap_clock_gettime and the rest. examples/syscon-probe is such a crate, and
+   so is any crate built without a `cosmo` feature.
+   FIX: cosmo-ld only passes the wrap list when cosmo_compat is actually in the
+   link line. tests/run-all.sh: 13 passed, 0 failed (it did not build before).
+
+
+================================================================================
+STILL OPEN
+================================================================================
+
+7. D3D11 TAKES AN int3 INSIDE d3d11.dll
+   The only Windows API found so far that does not work. A cosmo process that
+   LoadLibraryW's d3d11.dll and calls D3D11CreateDevice raises STATUS_BREAKPOINT
+   (0x80000003) before returning a device. Measured precisely: LoadLibraryW
+   succeeds, GetProcAddress succeeds, the call never returns. The trap address is
+   identical across runs while d3d11.dll's base moves, which points at a system
+   DLL rather than d3d11 itself, and is consistent with cosmo's vectored exception
+   handler turning a first-chance exception the runtime meant to handle into a
+   fatal signal. That last part is a hypothesis, not a measurement.
+
+   user32, gdi32, kernel32 and dwmapi are all fine through the same mechanism, and
+   a full GDI window with vblank-accurate pacing runs on the APE without trouble.
+   Other suspicion, untested: D3D11 makes its own threads and leans on TLS, and
+   the target specs set has-thread-local: false.
+
+   Next concrete step if this is ever worth chasing: print the loaded module bases
+   immediately before the call and identify which module the trap address is in.
+   cosmo already imports psapi, so it is cheap.
+
+   softer_gui simply defaults its APE builds to the GDI presenter and keeps the
+   D3D one for native Windows, where it works.
+
+
+================================================================================
+ALREADY FIXED UPSTREAM, NOTED SO IT IS NOT RE-DISCOVERED
+================================================================================
+
+5801db9 overrides codegen-units = 1 and lto = "fat" for cosmo builds, both of
+which break threads. softer_gui's release profile sets both; its APE was rebuilt
+against that fix and re-verified on Windows.

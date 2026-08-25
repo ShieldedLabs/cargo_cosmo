@@ -1,1 +1,8 @@
-cosmo-ld
+#!/bin/sh
+# Deliberately a real file rather than a symlink to cosmo-ld: a clone made by
+# Windows git turns symlinks into text files and the linker then stops working
+# with an error that names neither git nor symlinks. cosmo-ld takes the arch
+# from COSMO_LD_ARCH when it is set.
+COSMO_LD_ARCH=aarch64
+export COSMO_LD_ARCH
+exec "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/cosmo-ld" "$@"

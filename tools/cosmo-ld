@@ -6,11 +6,16 @@
 # strip the args that fight cosmo's model, and inject cosmo's CRT, linker
 # script and libc in the right order.
 #
-# Invoked as cosmo-ld-x86_64 / cosmo-ld-aarch64; the suffix selects the arch.
+# Invoked as cosmo-ld-x86_64 / cosmo-ld-aarch64; the suffix selects the arch,
+# or COSMO_LD_ARCH says it outright. The wrappers use the variable so they can be
+# ordinary files: they were symlinks, and a clone made by Windows git (where
+# core.symlinks defaults to false) writes those as text files containing the
+# link target, after which rustc fails with "could not exec the linker: Exec
+# format error" and nothing explains why.
 
 set -e
 
-ARCH=${0##*/cosmo-ld-}
+ARCH=${COSMO_LD_ARCH:-${0##*/cosmo-ld-}}
 REPO=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BIN="$REPO/toolchain/cosmocc/bin"
 LIB="$REPO/toolchain/cosmocc/$ARCH-linux-cosmo/lib"

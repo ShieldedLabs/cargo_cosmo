@@ -66,7 +66,47 @@ def ape(path, *args):
    with open(path, "rb") as f:
       if f.read(4) == b"\x7fELF":
          return [path, *args]
+   # Under WSL, binfmt_misc claims PE images for Windows and an APE is one, so
+   # handing the path to the kernel runs it as a WINDOWS process. That is a
+   # silent wrong answer rather than an error: the binary runs, and reports the
+   # host it really landed on. Go through cosmo's own loader instead, so a run
+   # started on Linux stays on Linux.
+   loader = ape_loader()
+   if loader:
+      return [loader, path, *args]
    return ["/bin/sh", path, *args]
+
+
+def ape_loader():
+   """cosmo's ELF loader for this host, when a bare APE would be hijacked."""
+   if not sys.platform.startswith("linux"):
+      return None
+   if not os.path.exists("/proc/sys/fs/binfmt_misc/WSLInterop"):
+      return None
+   import platform
+   loader = os.path.join(BIN, f"ape-{platform.machine()}.elf")
+   return loader if os.path.exists(loader) else None
+
+
+def check_toolchain(arch):
+   """Fail early, and by name, when cosmocc's tools cannot be exec'd.
+
+   cosmocc ships its binaries as APEs. A shell can run one, which is why the
+   linker shim itself works, but cosmocc's gcc spawns `ld`, `as` and `cc1` with
+   posix_spawnp, and the kernel cannot exec an APE. The result is
+   "cannot execute 'ld': posix_spawnp: No such file or directory" buried in a
+   warning, and no output binary. Note that a mode check does not catch this: an
+   APE is perfectly executable as far as the filesystem is concerned.
+   """
+   cc = os.path.join(BIN, f"{arch}-linux-cosmo-gcc")
+   if not os.path.exists(cc):
+      return
+   with open(cc, "rb") as f:
+      magic = f.read(4)
+   if magic == b"MZqF":
+      die(f"{cc} is still an APE, so gcc will not be able to spawn its own ld.\n"
+          f"       Run: {os.path.join(REPO, 'tools', 'assimilate-toolchain.sh')}\n"
+          f"       (or register APE with binfmt_misc)")
 
 
 def ensure_spec(arch):
@@ -102,6 +142,7 @@ def die(msg):
 
 def build_arch(arch, profile, extra):
    """Run cargo for one arch; return {bin_name: path} for every executable."""
+   check_toolchain(arch)
    spec = ensure_spec(arch)
 
    # No explicit +toolchain: that would override rust-toolchain.toml and pull
@@ -138,6 +179,24 @@ def build_arch(arch, profile, extra):
          continue
       if msg.get("reason") == "compiler-artifact" and msg.get("executable"):
          out[msg["target"]["name"]] = msg["executable"]
+
+   # Cargo can report success for a link that produced nothing. rustc surfaces
+   # linker output through #[warn(linker_messages)] and still exits 0, so a
+   # toolchain that cannot spawn `ld` gives "Finished" and no binary, and the
+   # first sign of trouble is apelink failing on a missing file several steps
+   # later. Check here, where the arch is still known and the cause is nearby.
+   missing = [(n, p) for n, p in out.items() if not os.path.exists(p)]
+   if missing:
+      for name, path in missing:
+         sys.stderr.write(f"cargo-cosmo: {arch}: cargo reported {name} at {path}, "
+                          f"but nothing is there\n")
+      sys.stderr.write("cargo-cosmo: the link step failed silently. Re-run the "
+                       "cargo command by hand to see the linker's own message; "
+                       "if it says it cannot execute 'ld', the cosmocc tools are "
+                       "still APEs and need tools/assimilate-toolchain.sh\n")
+      die(f"{arch} produced no binary")
+   if not out:
+      die(f"{arch} build produced no executable at all")
    return out
 
 

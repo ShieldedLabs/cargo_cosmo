@@ -23,6 +23,27 @@ python3 "$REPO/tools/gen-target-specs.py" >/dev/null
 HOST=$(uname -s)
 HOST_ARCH=$(uname -m)
 
+# Running an APE the obvious way is wrong under WSL. binfmt_misc registers
+# WSLInterop for PE images, an APE is one, so `./foo.com` hands the file to
+# Windows and the process that runs is a WINDOWS process. Nothing errors: the
+# binary runs, on the wrong OS, and a suite that believes it is testing Linux
+# reports Windows results. Go through cosmo's own loader when that is the case.
+APE=""
+if [ "$HOST" = Linux ] && [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then
+   APE="$REPO/toolchain/cosmocc/bin/ape-$HOST_ARCH.elf"
+   if [ -x "$APE" ]; then
+      echo "note: WSL detected; running APEs through $APE so this stays a Linux test"
+   else
+      echo "note: WSL detected but no $APE; APEs here will run as WINDOWS processes"
+      APE=""
+   fi
+fi
+
+# Run an APE on this host. $APE is empty everywhere except WSL.
+ape() {
+   if [ -n "$APE" ]; then "$APE" "$@"; else "$@"; fi
+}
+
 pass=0
 fail=0
 skip=0
@@ -57,7 +78,7 @@ banner() { echo; echo "=== $1 ==="; }
 banner "C baseline (proves the toolchain itself)"
 cd "$REPO/examples/c-hello" || exit 1
 cosmocc -O2 -o hello.com hello.c || exit 1
-check "c hello runs" "$(./hello.com)" "hello from a C APE"
+check "c hello runs" "$(ape ./hello.com)" "hello from a C APE"
 
 # ------------------------------------------------------------------- no_std
 banner "no_std Rust -> cosmopolitan"
@@ -81,7 +102,7 @@ fi
 banner "std Rust -> fat APE"
 cd "$REPO/examples/rust-std" || exit 1
 cargo cosmo build --release >/dev/null || exit 1
-out=$(./target/cosmo/stdhello.com 2>&1)
+out=$(ape ./target/cosmo/stdhello.com 2>&1)
 check "stdio"     "$out" "hello from a std Rust APE"
 check "heap"      "$out" "heap  = works"
 check "threads"   "$out" "thread sum 1..10 = 55"
@@ -107,7 +128,7 @@ banner "cosmo runtime constants visible from Rust"
 cd "$REPO/examples/syscon-probe" || exit 1
 cargo cosmo build --release >/dev/null || exit 1
 if [ "$HOST" = Linux ]; then
-   check "no constant mismatches" "$(./target/cosmo/syscon-probe.com)" "0 mismatch"
+   check "no constant mismatches" "$(ape ./target/cosmo/syscon-probe.com)" "0 mismatch"
 else
    # Off Linux the constants are *expected* to diverge -- that is the port's
    # open problem, not a regression. What must hold is that cosmo's runtime
@@ -117,7 +138,7 @@ else
    cd "$REPO/examples/cross-os-probe" || exit 1
    cargo cosmo build --release >/dev/null || exit 1
    check "cosmo matches the extracted table for this OS" \
-      "$(./target/cosmo/cross-os-probe.com 2>&1)" "0 unexpected"
+      "$(ape ./target/cosmo/cross-os-probe.com 2>&1)" "0 unexpected"
 fi
 
 # ------------------------------------------------------ aarch64 reserved regs
