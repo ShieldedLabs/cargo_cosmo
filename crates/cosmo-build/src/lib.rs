@@ -13,13 +13,13 @@
 //! ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 //!
 //! [build-dependencies]
-//! cosmo-build = { version = "2", optional = true }
+//! cosmo-build = { version = "3", optional = true }
 //!
 //! # The shim has to be in the crate graph or the link fails with a hundred
 //! # undefined __wrap_* references. cfg(cosmo) is set only by this crate, so
 //! # ordinary builds neither resolve nor compile it.
 //! [target.'cfg(cosmo)'.dependencies]
-//! cosmo-compat = "2"
+//! cosmo-compat = "3"
 //!
 //! [lints.rust]
 //! unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -31,6 +31,13 @@
 //!    #[cfg(feature = "ape")]
 //!    cosmo_build::apeify();
 //! }
+//! ```
+//!
+//! A library crate has no bins, so it names the program the APE is built from:
+//!
+//! ```toml
+//! [package.metadata.cosmo]
+//! example = "demo"
 //! ```
 //!
 //! ```text
@@ -85,10 +92,11 @@
 //! libc boundary -- see the repository for how far that goes.
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 mod cache;
 mod driver;
+mod manifest;
 mod pairing;
 mod toolchain;
 
@@ -138,14 +146,37 @@ pub fn wanted() -> bool {
 /// This is the one call a `build.rs` needs. Use [`build_ape`] to skip the
 /// policy and always build.
 pub fn apeify() {
-   apeify_with(&[])
+   let args = match manifest_args() {
+      Ok(a) => a,
+      Err(e) => panic!("cosmo-build: {e}"),
+   };
+   let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+   apeify_with(&borrowed)
 }
 
-/// [`apeify`] with extra arguments handed to each `cargo build`.
+/// What `[package.metadata.cosmo]` says to build, as cargo arguments.
 ///
-/// A library crate has no bins, so nothing is produced unless a target is
-/// named: `apeify_with(&["--example", "demo"])`. Anything `cargo build`
-/// accepts works -- `--bin`, `--features`, `--no-default-features`.
+/// Empty when the table is absent, which is right for a crate with bins: the
+/// APE is built from whatever `cargo build` would have produced anyway.
+///
+/// ```toml
+/// [package.metadata.cosmo]
+/// example  = "demo"              # or ["demo", "bench"]
+/// bin      = "tool"              # or [...]
+/// features = ["gui", "x11"]
+/// args     = ["--no-default-features"]
+/// ```
+pub fn manifest_args() -> Result<Vec<String>, String> {
+   let dir = env::var_os("CARGO_MANIFEST_DIR").ok_or("CARGO_MANIFEST_DIR is not set")?;
+   manifest::args(Path::new(&dir))
+}
+
+/// [`apeify`] with the arguments given here instead of the manifest's.
+///
+/// The call site wins outright: `[package.metadata.cosmo]` is not consulted, so
+/// there is one place to look rather than two. Anything `cargo build` accepts
+/// works -- `--example`, `--bin`, `--features`, `--no-default-features`. Prefer
+/// the manifest table unless the choice has to be computed.
 ///
 /// ```no_run
 /// // build.rs of a library whose demo lives in examples/demo.rs

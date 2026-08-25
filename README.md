@@ -198,7 +198,7 @@ the link fails with a hundred undefined `__wrap_*` references. Scoping it to
 
 ```toml
 [target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "2"
+cosmo-compat = "3"
 
 [lints.rust]                                    # optional: quiet the warning
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -219,7 +219,7 @@ optional, so with the feature off it is never even compiled:
 ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 
 [build-dependencies]
-cosmo-build = { version = "2", optional = true }
+cosmo-build = { version = "3", optional = true }
 ```
 
 ```rust
@@ -294,6 +294,26 @@ bytes. A mismatch deletes the download and fails the build.
 
 `COSMO_COSMOCC_URL` points the fetch at a mirror or an internal cache;
 `COSMO_COSMOCC_SHA256` is how you run a different cosmocc deliberately.
+
+### A library crate
+
+An APE is a program, and a library has none, so it names the one the APE is
+built from. The build script cannot learn this from the command line -- cargo
+hands an identical environment to `cargo build` and `cargo build --example
+demo` -- so it is declared next to the crate's other target declarations, where
+cargo ignores it:
+
+```toml
+[package.metadata.cosmo]
+example  = "demo"              # or ["demo", "bench"]
+bin      = "tool"              # or [...]
+features = ["gui", "x11"]
+args     = ["--no-default-features"]
+```
+
+`build.rs` stays `cosmo_build::apeify()`. Where the choice has to be computed
+rather than declared, `apeify_with(&["--example", "demo"])` takes the same
+arguments directly and the manifest table is not consulted.
 
 ### As a script
 

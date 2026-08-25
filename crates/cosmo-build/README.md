@@ -13,10 +13,10 @@ two ELFs with `apelink`, which is what cosmocc does for C.
 ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 
 [build-dependencies]
-cosmo-build = { version = "2", optional = true }
+cosmo-build = { version = "3", optional = true }
 
 [target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "2"
+cosmo-compat = "3"
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -40,6 +40,26 @@ $ ./target/cosmo/myprog.com
 ```
 
 With the feature off, this crate is never fetched, compiled or run.
+
+### A library crate
+
+An APE is a program, and a library has none, so it names the one the APE is
+built from. The build script cannot learn this from the command line -- cargo
+hands an identical environment to `cargo build` and `cargo build --example
+demo` -- so it is declared next to the crate's other target declarations, where
+cargo ignores it:
+
+```toml
+[package.metadata.cosmo]
+example  = "demo"              # or ["demo", "bench"]
+bin      = "tool"              # or [...]
+features = ["gui", "x11"]
+args     = ["--no-default-features"]
+```
+
+`build.rs` stays `cosmo_build::apeify()`. Where the choice has to be computed
+rather than declared, `apeify_with(&["--example", "demo"])` takes the same
+arguments directly and the manifest table is not consulted.
 
 ## What it needs
 
