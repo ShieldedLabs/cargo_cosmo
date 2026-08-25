@@ -9,7 +9,7 @@ fuses the two ELFs with apelink, which is exactly what cosmocc does for C.
     cargo cosmo run    [--release] [<cargo args>] [-- <args to the program>]
     cargo cosmo clean
 
-Output lands in target/cosmo/<name>.com and runs on x86-64 and arm64.
+Output lands in target/cosmo/<profile>/<name>.com and runs on x86-64 and arm64.
 """
 import json
 import os
@@ -237,7 +237,9 @@ def cmd_build(profile, extra):
          print(f"cargo-cosmo: warning: {name!r} built for {arch} only, skipping",
                file=sys.stderr)
 
-   outdir = os.path.join("target", "cosmo")
+   # target/cosmo/<profile>/, mirroring cargo's own target/<profile>/: a flat
+   # target/cosmo/ let debug and release overwrite each other.
+   outdir = os.path.join("target", "cosmo", profile)
    os.makedirs(outdir, exist_ok=True)
 
    results = []

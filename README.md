@@ -11,9 +11,9 @@ $ cd examples/rust-std
 $ cargo cosmo build --release
 cargo-cosmo: building x86_64
 cargo-cosmo: building aarch64
-cargo-cosmo: target/cosmo/stdhello.com  (1,439,666 bytes, x86_64+aarch64)
+cargo-cosmo: target/cosmo/release/stdhello.com  (1,439,666 bytes, x86_64+aarch64)
 
-$ ./target/cosmo/stdhello.com
+$ ./target/cosmo/release/stdhello.com
 hello from a std Rust APE
 heap  = works
 thread sum 1..10 = 55
@@ -211,7 +211,7 @@ the link fails with a hundred undefined `__wrap_*` references. Scoping it to
 
 ```toml
 [target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "4"
+cosmo-compat = "5"
 
 [lints.rust]                                    # optional: quiet the warning
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -232,7 +232,7 @@ optional, so with the feature off it is never even compiled:
 ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 
 [build-dependencies]
-cosmo-build = { version = "4", optional = true }
+cosmo-build = { version = "5", optional = true }
 ```
 
 ```rust
@@ -245,7 +245,7 @@ fn main() {
 
 ```
 cargo build           ordinary host build
-cargo build -F ape    host build + target/cosmo/<name>.com
+cargo build -F ape    host build + target/cosmo/<profile>/<name>.com
 ```
 
 Drop the feature and the `optional` and every `cargo build` produces an APE --
@@ -338,7 +338,7 @@ which the crate route cannot. It clones this repo and drives the Python tools in
 ```sh
 curl -sSLo build.sh https://raw.githubusercontent.com/ShieldedLabs/cargo_cosmo/main/templates/build.sh
 chmod +x build.sh
-./build.sh --release      # -> target/cosmo/<name>.com
+./build.sh --release      # -> target/cosmo/release/<name>.com
 ```
 
 `templates/build.rs` is the middle option: the feature-flag behaviour with the

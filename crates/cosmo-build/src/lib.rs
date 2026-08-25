@@ -13,13 +13,13 @@
 //! ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 //!
 //! [build-dependencies]
-//! cosmo-build = { version = "4", optional = true }
+//! cosmo-build = { version = "5", optional = true }
 //!
 //! # The shim has to be in the crate graph or the link fails with a hundred
 //! # undefined __wrap_* references. cfg(cosmo) is set only by this crate, so
 //! # ordinary builds neither resolve nor compile it.
 //! [target.'cfg(cosmo)'.dependencies]
-//! cosmo-compat = "4"
+//! cosmo-compat = "5"
 //!
 //! [lints.rust]
 //! unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -46,7 +46,7 @@
 //! extern crate cosmo_compat as _;
 //! ```
 //!
-//! Then `cargo build -F ape` leaves the APE in `target/cosmo/<name>.com`, and a
+//! Then `cargo build -F ape` leaves the APE in `target/cosmo/<profile>/<name>.com`, and a
 //! plain `cargo build` is an ordinary host build that never compiles this crate.
 //!
 //! # What it needs
@@ -139,7 +139,7 @@ pub fn wanted() -> bool {
    }
 }
 
-/// Build this crate into `target/cosmo/<name>.com` unless this is a check-only
+/// Build this crate into `target/cosmo/<profile>/<name>.com` unless this is a check-only
 /// pass or the build script is re-entering itself. Panics with the failure if
 /// the build breaks.
 ///

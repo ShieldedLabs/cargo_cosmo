@@ -7,7 +7,7 @@
 // logic, one line in build.rs, nothing vendored to drift.
 //
 //    cargo build                 ordinary host build, untouched
-//    cargo build -F ape          host build + target/cosmo/<name>.com
+//    cargo build -F ape          host build + target/cosmo/<profile>/<name>.com
 //
 // Four things here are not optional; each one is a silent failure without it.
 use std::{env, process::Command};

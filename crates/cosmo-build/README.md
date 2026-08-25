@@ -13,10 +13,10 @@ two ELFs with `apelink`, which is what cosmocc does for C.
 ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 
 [build-dependencies]
-cosmo-build = { version = "4", optional = true }
+cosmo-build = { version = "5", optional = true }
 
 [target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "4"
+cosmo-compat = "5"
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -36,7 +36,7 @@ extern crate cosmo_compat as _;
 
 ```
 $ cargo build -F ape
-$ ./target/cosmo/myprog.com
+$ ./target/cosmo/release/myprog.com
 ```
 
 With the feature off, this crate is never fetched, compiled or run.

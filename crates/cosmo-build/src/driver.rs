@@ -25,7 +25,14 @@ pub fn build(
    // Only fuse binaries that exist on both sides; an example built for one
    // arch alone cannot become an APE, and silently dropping it beats failing
    // the whole build.
-   let outdir = manifest_dir.join("target").join("cosmo");
+   // target/cosmo/<profile>/, mirroring cargo's own target/<profile>/. A flat
+   // target/cosmo/ let a debug build and a release build overwrite each other,
+   // so which one you had depended on which you ran last. Build scripts only
+   // ever see "debug" or "release" -- a custom profile arrives as its base.
+   let outdir = manifest_dir
+      .join("target")
+      .join("cosmo")
+      .join(if release { "release" } else { "debug" });
    fs::create_dir_all(&outdir).map_err(|e| format!("{}: {e}", outdir.display()))?;
 
    let mut out = Vec::new();

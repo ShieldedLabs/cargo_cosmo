@@ -102,7 +102,7 @@ fi
 banner "std Rust -> fat APE"
 cd "$REPO/examples/rust-std" || exit 1
 cargo cosmo build --release >/dev/null || exit 1
-out=$(ape ./target/cosmo/stdhello.com 2>&1)
+out=$(ape ./target/cosmo/release/stdhello.com 2>&1)
 check "stdio"     "$out" "hello from a std Rust APE"
 check "heap"      "$out" "heap  = works"
 check "threads"   "$out" "thread sum 1..10 = 55"
@@ -112,7 +112,7 @@ check "io::Error formatting (strerror_r shim)" "$out" "ioerr = No such file or d
 
 # ------------------------------------------------------------------ fat-ness
 banner "fat binary carries both architectures"
-check-fat.py "$REPO/examples/rust-std/target/cosmo/stdhello.com"
+check-fat.py "$REPO/examples/rust-std/target/cosmo/release/stdhello.com"
 ok_if $? "both architectures present" "fat binary missing an architecture"
 
 # -------------------------------------------------------- normalization shim
@@ -128,7 +128,7 @@ banner "cosmo runtime constants visible from Rust"
 cd "$REPO/examples/syscon-probe" || exit 1
 cargo cosmo build --release >/dev/null || exit 1
 if [ "$HOST" = Linux ]; then
-   check "no constant mismatches" "$(ape ./target/cosmo/syscon-probe.com)" "0 mismatch"
+   check "no constant mismatches" "$(ape ./target/cosmo/release/syscon-probe.com)" "0 mismatch"
 else
    # Off Linux the constants are *expected* to diverge -- that is the port's
    # open problem, not a regression. What must hold is that cosmo's runtime
@@ -138,7 +138,7 @@ else
    cd "$REPO/examples/cross-os-probe" || exit 1
    cargo cosmo build --release >/dev/null || exit 1
    check "cosmo matches the extracted table for this OS" \
-      "$(ape ./target/cosmo/cross-os-probe.com 2>&1)" "0 unexpected"
+      "$(ape ./target/cosmo/release/cross-os-probe.com 2>&1)" "0 unexpected"
 fi
 
 # ------------------------------------------------------ aarch64 reserved regs

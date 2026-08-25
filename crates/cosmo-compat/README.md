@@ -25,7 +25,7 @@ Paired with [`cosmo-build`](https://crates.io/crates/cosmo-build), which sets
 
 ```toml
 [target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "4"
+cosmo-compat = "5"
 ```
 
 ```rust

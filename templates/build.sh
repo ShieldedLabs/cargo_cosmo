@@ -5,7 +5,7 @@
 # installed first: it fetches the cargo_cosmo tools, the pinned nightly and
 # cosmopolitan's toolchain on demand, then hands off to `cargo cosmo`.
 #
-#    ./build.sh              debug APE   -> target/cosmo/<name>.com
+#    ./build.sh              debug APE   -> target/cosmo/debug/<name>.com
 #    ./build.sh --release    release APE
 #    ./build.sh run -- ...   build and run it
 #
