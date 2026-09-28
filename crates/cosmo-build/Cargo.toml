@@ -1,6 +1,6 @@
 [package]
 name = "cosmo-build"
-version = "5.0.0"
+version = "5.0.1"
 edition = "2021"
 rust-version = "1.74"
 license = "MIT"
@@ -13,11 +13,11 @@ categories = ["development-tools::build-utils", "os"]
 include = ["src/**", "assets/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [dependencies]
-# Both are here so a consuming project needs no system tools: cosmocc is
+# Both are here so a consuming project needs no system tools (SHA-256 is
+# src/sha256.rs, so no hashing crate can collide with the consumer's pins): cosmocc is
 # ~440MB of zip fetched over TLS, and shelling out to curl/unzip would put that
 # burden on every machine that builds the crate.
 ureq = "3"
-sha2 = "0.11"
 zip = { version = "8", default-features = false, features = ["deflate"] }
 
 [package.metadata.docs.rs]

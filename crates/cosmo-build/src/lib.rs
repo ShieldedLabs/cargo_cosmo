@@ -98,6 +98,7 @@ mod cache;
 mod driver;
 mod manifest;
 mod pairing;
+mod sha256;
 mod toolchain;
 
 /// True when cargo is only type-checking, so no artifact will be produced.

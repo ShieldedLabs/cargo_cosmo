@@ -1,7 +1,7 @@
 //! Acquiring the two toolchains: the pinned Rust nightly and cosmocc.
 
 use crate::cache::{self, Cache, CHANNEL};
-use sha2::{Digest, Sha256};
+use crate::sha256::Sha256;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::Path;
