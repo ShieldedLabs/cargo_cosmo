@@ -126,6 +126,15 @@ pub fn ensure_cosmocc(cache: &Cache) -> Result<(), String> {
 /// Converting the toolchain once, here, means nothing downstream has to care:
 /// every tool is then a native ELF that execs directly.
 fn assimilate(cosmocc: &Path) -> Result<(), String> {
+   // Not on macOS: the only native form assimilate can produce there is x86-64
+   // Mach-O, so on Apple silicon it converts nothing and reports "macho dd
+   // command for arm64 not found". It is also unnecessary: /bin/sh is bash
+   // there, which parses the APE header, and every tool in the chain that
+   // spawns another (gcc -> cc1, as, ld) is itself a cosmo program whose execve
+   // knows how to launch an APE. The tools stay APEs and run through the shell.
+   if cfg!(target_os = "macos") {
+      return Ok(());
+   }
    let tool = cosmocc.join("bin").join("assimilate");
    if !tool.exists() {
       return Err(format!("no {} in the toolchain", tool.display()));
