@@ -6,11 +6,16 @@
 # strip the args that fight cosmo's model, and inject cosmo's CRT, linker
 # script and libc in the right order.
 #
-# Invoked as cosmo-ld-x86_64 / cosmo-ld-aarch64; the suffix selects the arch.
+# Invoked as cosmo-ld-x86_64 / cosmo-ld-aarch64; the suffix selects the arch,
+# or COSMO_LD_ARCH says it outright. The wrappers use the variable so they can be
+# ordinary files: they were symlinks, and a clone made by Windows git (where
+# core.symlinks defaults to false) writes those as text files containing the
+# link target, after which rustc fails with "could not exec the linker: Exec
+# format error" and nothing explains why.
 
 set -e
 
-ARCH=${0##*/cosmo-ld-}
+ARCH=${COSMO_LD_ARCH:-${0##*/cosmo-ld-}}
 COSMOCC=@COSMOCC@
 BIN="$COSMOCC/bin"
 LIB="$COSMOCC/$ARCH-linux-cosmo/lib"
@@ -80,8 +85,36 @@ WRAPS="-Wl,--wrap=accept4 -Wl,--wrap=bind -Wl,--wrap=chdir -Wl,--wrap=chmod -Wl,
 # fat LTO merged them into one object before the linker ever saw them.
 [ -n "$COSMO_LD_DEBUG" ] && printf '%s\n' "$ARGS" >> "$COSMO_LD_DEBUG"
 
+# Link a copy of libcosmo in which every wrapped symbol NAME is renamed to
+# __cosmo_real_NAME, definition and internal references alike; cosmo-compat
+# calls the real function by that name. --wrap redirects undefined references
+# from every object in the link, libcosmo's own included, so with the stock
+# archive cosmo's routines called our translators and got Linux-numbered
+# results back where they expect the host's. realpath is the case that was
+# measured: its internal readlink came back with errno 22, cosmo compared that
+# against the host's EINVAL (87 on Windows), and every canonicalize failed. With
+# the internal references renamed, cosmo's calls to itself never leave cosmo.
+# The copy is keyed by the wrap list and cached beside libcosmo.a, since the
+# objcopy pass over the whole archive is not free.
+LIBCOSMO=-lcosmo
+if [ -n "$WRAPS" ]; then
+   SUM=$(printf '%s' "$WRAPS" | cksum | cut -d' ' -f1)
+   LIBCOSMO="$LIB/libcosmo-unwrapped-$SUM.a"
+   if [ ! -f "$LIBCOSMO" ] || [ "$LIB/libcosmo.a" -nt "$LIBCOSMO" ]; then
+      # Parallel links race to build it; each writes its own temp and the rename is atomic.
+      TMP="$LIBCOSMO.$$"
+      for wrap in $WRAPS; do
+         sym=${wrap#-Wl,--wrap=}
+         printf '%s __cosmo_real_%s\n' "$sym" "$sym"
+      done > "$TMP.syms"
+      "$BIN/$ARCH-linux-cosmo-objcopy" --redefine-syms="$TMP.syms" "$LIB/libcosmo.a" "$TMP"
+      rm -f "$TMP.syms"
+      mv -f "$TMP" "$LIBCOSMO"
+   fi
+fi
+
 # shellcheck disable=SC2086  # word splitting is the point for these flag sets
-"$CC" -o "$OUTPUT" $CRT $COMMON $ARCHFLAGS $WRAPS $ARGS -lcosmo
+"$CC" -o "$OUTPUT" $CRT $COMMON $ARCHFLAGS $WRAPS $ARGS "$LIBCOSMO"
 
 # cosmocc runs this on every linked image; it rewrites the ELF into the shape
 # apelink and the APE loader expect. Skipping it produces a binary that links

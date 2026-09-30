@@ -134,7 +134,7 @@ Not a `libc` crate fork. std keeps calling `open`, `socket`, `poll` … by name 
 Linux-numbered arguments; `cosmo-ld` links every program with `-Wl,--wrap=NAME`
 for each name in `crates/cosmo-compat/wrap.txt`, so those calls land in
 `__wrap_NAME` in `cosmo-compat/src/shim.rs`, which translates arguments to the
-host's numbering, calls `__real_NAME` (cosmo's), and translates errno, `revents`,
+host's numbering, calls `__cosmo_real_NAME` (cosmo's), and translates errno, `revents`,
 `sa_family`, wait statuses and option results back. The host values are cosmo's
 own load-time symbols (`extern const int EAGAIN` etc.), read at run time — the
 binary carries no per-OS table, and the JSON columns exist only so the logic can
@@ -152,9 +152,11 @@ generated tables cover it.
 Two properties the design depends on, both deliberate:
 
 * **Every wrapper is heap-free and lock-free, and is the identity until cosmo's
-  tables are filled.** `--wrap` also captures cosmopolitan's own startup calls
-  (its first `open`/`mmap`), before std's runtime exists. A first version used
-  `OnceLock` and segfaulted there.
+  tables are filled.** `--wrap` used to capture cosmopolitan's own startup
+  calls (its first `open`/`mmap`), before std's runtime exists, and a first
+  version that used `OnceLock` segfaulted there. libcosmo's internal references
+  no longer reach the wrappers (below), but anything else in the link that is
+  not rustc output still can, so the property stays.
 * **Wrapped functions taking only integer/pointer arguments are wrapped by a
   generated six-register passthrough** rather than a typed signature each: SysV
   and AAPCS pass those in the first integer registers regardless of declared
@@ -171,12 +173,33 @@ in the wrapper --
     80003c63c:  bl  800008a70 <__wrap_openat>
 
 -- so `File::create` arrived at the kernel with O_CREAT already mangled and
-failed with ENOENT on a Mac. `__wrap_open` now calls `__real_openat` directly,
-which is the leaf (cosmo's `openat` goes straight to `__sys_openat`), so the
-translation happens exactly once. That fixes the path std actually uses; the
-hazard itself is still there for any other cosmo routine that calls a wrapped
-public symbol, and the general fix remains wrapping only std's objects
-(`objcopy --redefine-sym` on the rlibs).
+failed with ENOENT on a Mac. `__wrap_open` was pointed at the leaf `openat`,
+which fixed that one path and left the hazard in every other cosmo routine
+calling a wrapped public symbol.
+
+Windows then showed it is not only an argument problem. cosmo's `realpath`
+calls `readlink` on each component and treats EINVAL as "not a symlink". The
+internal call landed in `__wrap_readlink`, which turned the host's EINVAL (87,
+from Win32's ERROR_NOT_A_REPARSE_POINT) into Linux's 22 before `realpath`
+compared it with the host's EINVAL, so `realpath` gave up on the first plain
+file and every `fs::canonicalize` failed with "Error 22 (win32 error 4390)".
+On Linux the two numbers agree, which is why it went unseen there.
+
+The general fix, now in place: cosmo-ld links a copy of `libcosmo.a` in which
+every wrapped symbol NAME is renamed to `__cosmo_real_NAME` by `objcopy
+--redefine-syms`, definition and internal references alike, and cosmo-compat
+calls the real functions by that name. rustc output still references NAME,
+which `--wrap` still sends to `__wrap_NAME`; cosmo's calls to itself go
+straight to the renamed definitions. The name cannot be `__real_NAME`, because
+`--wrap` resolves any reference to that back to NAME, which the renamed
+archive no longer defines. The copy is cached beside `libcosmo.a`, keyed by a
+checksum of the wrap list. This is cheaper than the earlier plan of renaming
+references in every rlib: one archive per architecture, built once.
+
+Still exposed: C code compiled by cosmocc and linked alongside (a `cc`-built
+static library, such as RocksDB) references NAME, reaches the wrappers, and
+has its host-numbered constants and errno translated as though they were
+Linux's. Extending the rename to those archives would close it.
 
 A second gap the Mac found: `clock_gettime` and `clock_nanosleep` had been
 classified as errno-only passthroughs, but their first argument is a

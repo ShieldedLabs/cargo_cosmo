@@ -2,19 +2,21 @@
 //! `--wrap=NAME` for each name in ../wrap.txt, so a call to `open` from std
 //! (or from anything else in the link) lands in `__wrap_open` here, which
 //! translates the Linux-numbered arguments to the host's numbering, calls
-//! `__real_open` (cosmo's), and translates errno / results back.
+//! `__cosmo_real_open` (cosmo's), and translates errno / results back.
 //!
 //! Only the functions whose ARGUMENTS carry constants are written here; the
 //! rest are generated register-passthrough wrappers in gen.rs that only fix
 //! errno. Anything not in wrap.txt reaches cosmo directly.
 //!
-//! Known hazard: `--wrap` also redirects cosmopolitan's own internal calls to
-//! these public names, and those pass HOST-numbered constants. On Windows the
-//! groups cosmo's internals use (open, mmap, signals) keep Linux numbering, so
-//! the translation is the identity there and the hazard is theoretical; on
-//! XNU it is not, and a cosmo-internal open(O_CLOEXEC) would be re-translated.
-//! The fix, if it bites, is for cosmo-ld to wrap only std's objects
-//! (objcopy --redefine-sym on the rlibs) instead of the whole link.
+//! `__cosmo_real_NAME` rather than `--wrap`'s own `__real_NAME`: cosmo-ld links
+//! a copy of libcosmo with NAME renamed to that throughout, so cosmopolitan's
+//! calls to its own public functions (realpath -> readlink, open -> openat)
+//! stay inside cosmo instead of landing here and being translated as if they
+//! came from std. `__real_NAME` would not survive the rename: `--wrap` resolves
+//! it to NAME, which the renamed archive no longer defines.
+//!
+//! C code compiled by cosmocc and linked alongside (a `cc`-built static library)
+//! still reaches these wrappers, although it passes host-numbered constants.
 
 #![allow(clippy::missing_safety_doc)]
 
@@ -24,35 +26,35 @@ use crate::xlate;
 
 unsafe extern "C" {
     fn __errno_location() -> *mut c_int;
-    fn __real_open(path: *const c_char, flags: c_int, ...) -> c_int;
-    fn __real_openat(dirfd: c_int, path: *const c_char, flags: c_int, ...) -> c_int;
-    fn __real_fcntl(fd: c_int, cmd: c_int, ...) -> c_int;
-    fn __real_ioctl(fd: c_int, req: u64, ...) -> c_int;
-    fn __real_socket(domain: c_int, ty: c_int, proto: c_int) -> c_int;
-    fn __real_socketpair(domain: c_int, ty: c_int, proto: c_int, sv: *mut c_int) -> c_int;
-    fn __real_setsockopt(fd: c_int, level: c_int, name: c_int, val: *const c_void, len: u32) -> c_int;
-    fn __real_getsockopt(fd: c_int, level: c_int, name: c_int, val: *mut c_void, len: *mut u32) -> c_int;
-    fn __real_send(fd: c_int, buf: *const c_void, n: usize, flags: c_int) -> isize;
-    fn __real_sendto(fd: c_int, buf: *const c_void, n: usize, flags: c_int, addr: *const c_void, alen: u32) -> isize;
-    fn __real_recv(fd: c_int, buf: *mut c_void, n: usize, flags: c_int) -> isize;
-    fn __real_recvfrom(fd: c_int, buf: *mut c_void, n: usize, flags: c_int, addr: *mut c_void, alen: *mut u32) -> isize;
-    fn __real_sendmsg(fd: c_int, msg: *const MsgHdr, flags: c_int) -> isize;
-    fn __real_recvmsg(fd: c_int, msg: *mut MsgHdr, flags: c_int) -> isize;
-    fn __real_poll(fds: *mut PollFd, n: u64, timeout: c_int) -> c_int;
-    fn __real_mmap(addr: *mut c_void, len: u64, prot: c_int, flags: c_int, fd: c_int, off: i64) -> *mut c_void;
-    fn __real_sigaction(sig: c_int, act: *const SigAction, old: *mut SigAction) -> c_int;
-    fn __real_signal(sig: c_int, handler: usize) -> usize;
-    fn __real_kill(pid: c_int, sig: c_int) -> c_int;
-    fn __real_killpg(pgrp: c_int, sig: c_int) -> c_int;
-    fn __real_sigaddset(set: *mut c_void, sig: c_int) -> c_int;
-    fn __real_waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
-    fn __real_unlinkat(dirfd: c_int, path: *const c_char, flags: c_int) -> c_int;
-    fn __real_linkat(olddir: c_int, old: *const c_char, newdir: c_int, new: *const c_char, flags: c_int) -> c_int;
-    fn __real_renameat(olddir: c_int, old: *const c_char, newdir: c_int, new: *const c_char) -> c_int;
-    fn __real_fchmodat(dirfd: c_int, path: *const c_char, mode: c_uint, flags: c_int) -> c_int;
-    fn __real_utimensat(dirfd: c_int, path: *const c_char, times: *const c_void, flags: c_int) -> c_int;
-    fn __real_getaddrinfo(node: *const c_char, service: *const c_char, hints: *const AddrInfo, res: *mut *mut AddrInfo) -> c_int;
-    fn __real_freeaddrinfo(ai: *mut AddrInfo);
+    fn __cosmo_real_open(path: *const c_char, flags: c_int, ...) -> c_int;
+    fn __cosmo_real_openat(dirfd: c_int, path: *const c_char, flags: c_int, ...) -> c_int;
+    fn __cosmo_real_fcntl(fd: c_int, cmd: c_int, ...) -> c_int;
+    fn __cosmo_real_ioctl(fd: c_int, req: u64, ...) -> c_int;
+    fn __cosmo_real_socket(domain: c_int, ty: c_int, proto: c_int) -> c_int;
+    fn __cosmo_real_socketpair(domain: c_int, ty: c_int, proto: c_int, sv: *mut c_int) -> c_int;
+    fn __cosmo_real_setsockopt(fd: c_int, level: c_int, name: c_int, val: *const c_void, len: u32) -> c_int;
+    fn __cosmo_real_getsockopt(fd: c_int, level: c_int, name: c_int, val: *mut c_void, len: *mut u32) -> c_int;
+    fn __cosmo_real_send(fd: c_int, buf: *const c_void, n: usize, flags: c_int) -> isize;
+    fn __cosmo_real_sendto(fd: c_int, buf: *const c_void, n: usize, flags: c_int, addr: *const c_void, alen: u32) -> isize;
+    fn __cosmo_real_recv(fd: c_int, buf: *mut c_void, n: usize, flags: c_int) -> isize;
+    fn __cosmo_real_recvfrom(fd: c_int, buf: *mut c_void, n: usize, flags: c_int, addr: *mut c_void, alen: *mut u32) -> isize;
+    fn __cosmo_real_sendmsg(fd: c_int, msg: *const MsgHdr, flags: c_int) -> isize;
+    fn __cosmo_real_recvmsg(fd: c_int, msg: *mut MsgHdr, flags: c_int) -> isize;
+    fn __cosmo_real_poll(fds: *mut PollFd, n: u64, timeout: c_int) -> c_int;
+    fn __cosmo_real_mmap(addr: *mut c_void, len: u64, prot: c_int, flags: c_int, fd: c_int, off: i64) -> *mut c_void;
+    fn __cosmo_real_sigaction(sig: c_int, act: *const SigAction, old: *mut SigAction) -> c_int;
+    fn __cosmo_real_signal(sig: c_int, handler: usize) -> usize;
+    fn __cosmo_real_kill(pid: c_int, sig: c_int) -> c_int;
+    fn __cosmo_real_killpg(pgrp: c_int, sig: c_int) -> c_int;
+    fn __cosmo_real_sigaddset(set: *mut c_void, sig: c_int) -> c_int;
+    fn __cosmo_real_waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
+    fn __cosmo_real_unlinkat(dirfd: c_int, path: *const c_char, flags: c_int) -> c_int;
+    fn __cosmo_real_linkat(olddir: c_int, old: *const c_char, newdir: c_int, new: *const c_char, flags: c_int) -> c_int;
+    fn __cosmo_real_renameat(olddir: c_int, old: *const c_char, newdir: c_int, new: *const c_char) -> c_int;
+    fn __cosmo_real_fchmodat(dirfd: c_int, path: *const c_char, mode: c_uint, flags: c_int) -> c_int;
+    fn __cosmo_real_utimensat(dirfd: c_int, path: *const c_char, times: *const c_void, flags: c_int) -> c_int;
+    fn __cosmo_real_getaddrinfo(node: *const c_char, service: *const c_char, hints: *const AddrInfo, res: *mut *mut AddrInfo) -> c_int;
+    fn __cosmo_real_freeaddrinfo(ai: *mut AddrInfo);
 }
 
 #[repr(C)]
@@ -106,27 +108,19 @@ unsafe fn with_host_addr<R>(addr: *const c_void, alen: u32, f: impl FnOnce(*cons
 }
 
 // ---- files ----------------------------------------------------------------------
-/// Goes to `__real_openat`, not `__real_open`, and that is load-bearing.
-///
-/// cosmopolitan's own `open()` is a thin forwarder to `openat()` -- and because
-/// `--wrap` rewrites references from *every* object, including libcosmo's, that
-/// internal call lands back in `__wrap_openat`, which translates the flags a
-/// second time. On Linux this is invisible (the groups are the identity); on
-/// XNU the second pass turns O_CREAT into something else and `File::create`
-/// fails with ENOENT. Calling the leaf directly -- cosmo's `openat` goes
-/// straight to `__sys_openat` -- keeps the translation to exactly one pass.
-///
-/// This is the general hazard in docs/DESIGN.md, fixed for the one path std
-/// actually uses. Any other cosmo routine that calls a wrapped public symbol
-/// has the same problem waiting in it.
+/// Goes to `__cosmo_real_openat` because cosmo's own `open()` only forwards
+/// there. This was once load-bearing -- before cosmo-ld renamed libcosmo's
+/// internal references, that forwarding call landed back in `__wrap_openat`
+/// and XNU got its flags translated twice (docs/DESIGN.md) -- and is now just
+/// the shorter path.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_open(path: *const c_char, flags: c_int, mode: c_uint) -> c_int {
     const AT_FDCWD: c_int = -100;   // canonical (Linux); at_fd() gives the host's
-    ret(unsafe { __real_openat(at_fd(AT_FDCWD), path, open_flags(flags), mode) })
+    ret(unsafe { __cosmo_real_openat(at_fd(AT_FDCWD), path, open_flags(flags), mode) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_openat(dirfd: c_int, path: *const c_char, flags: c_int, mode: c_uint) -> c_int {
-    ret(unsafe { __real_openat(at_fd(dirfd), path, open_flags(flags), mode) })
+    ret(unsafe { __cosmo_real_openat(at_fd(dirfd), path, open_flags(flags), mode) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fcntl(fd: c_int, cmd: c_int, arg: usize) -> c_int {
@@ -139,38 +133,38 @@ pub unsafe extern "C" fn __wrap_fcntl(fd: c_int, cmd: c_int, arg: usize) -> c_in
         c as c_int
     };
     let harg = if cmd == F_SETFL { open_flags(arg as c_int) as usize } else { arg };
-    let r = unsafe { __real_fcntl(fd, hcmd, harg) };
+    let r = unsafe { __cosmo_real_fcntl(fd, hcmd, harg) };
     if r == -1 { fix_errno(); return r; }
     if cmd == F_GETFL { return gen::open().to_linux(r as i64) as c_int; }
     r
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_ioctl(fd: c_int, req: u64, arg: usize) -> c_int {
-    ret(unsafe { __real_ioctl(fd, gen::ioctl().to_host(req as i64) as u64, arg) })
+    ret(unsafe { __cosmo_real_ioctl(fd, gen::ioctl().to_host(req as i64) as u64, arg) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_unlinkat(dirfd: c_int, path: *const c_char, flags: c_int) -> c_int {
-    ret(unsafe { __real_unlinkat(at_fd(dirfd), path, at_flags(flags)) })
+    ret(unsafe { __cosmo_real_unlinkat(at_fd(dirfd), path, at_flags(flags)) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_linkat(od: c_int, old: *const c_char, nd: c_int, new: *const c_char, flags: c_int) -> c_int {
-    ret(unsafe { __real_linkat(at_fd(od), old, at_fd(nd), new, at_flags(flags)) })
+    ret(unsafe { __cosmo_real_linkat(at_fd(od), old, at_fd(nd), new, at_flags(flags)) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_renameat(od: c_int, old: *const c_char, nd: c_int, new: *const c_char) -> c_int {
-    ret(unsafe { __real_renameat(at_fd(od), old, at_fd(nd), new) })
+    ret(unsafe { __cosmo_real_renameat(at_fd(od), old, at_fd(nd), new) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fchmodat(dirfd: c_int, path: *const c_char, mode: c_uint, flags: c_int) -> c_int {
-    ret(unsafe { __real_fchmodat(at_fd(dirfd), path, mode, at_flags(flags)) })
+    ret(unsafe { __cosmo_real_fchmodat(at_fd(dirfd), path, mode, at_flags(flags)) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_utimensat(dirfd: c_int, path: *const c_char, times: *const c_void, flags: c_int) -> c_int {
-    ret(unsafe { __real_utimensat(at_fd(dirfd), path, times, at_flags(flags)) })
+    ret(unsafe { __cosmo_real_utimensat(at_fd(dirfd), path, times, at_flags(flags)) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_mmap(addr: *mut c_void, len: u64, prot: c_int, flags: c_int, fd: c_int, off: i64) -> *mut c_void {
-    let r = unsafe { __real_mmap(addr, len, gen::mprot().to_host(prot as i64) as c_int, gen::mmap().to_host(flags as i64) as c_int, fd, off) };
+    let r = unsafe { __cosmo_real_mmap(addr, len, gen::mprot().to_host(prot as i64) as c_int, gen::mmap().to_host(flags as i64) as c_int, fd, off) };
     if r as isize == -1 { fix_errno(); }
     r
 }
@@ -178,11 +172,11 @@ pub unsafe extern "C" fn __wrap_mmap(addr: *mut c_void, len: u64, prot: c_int, f
 // ---- sockets ---------------------------------------------------------------------
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_socket(domain: c_int, ty: c_int, proto: c_int) -> c_int {
-    ret(unsafe { __real_socket(gen::af().to_host(domain as i64) as c_int, gen::sock().to_host(ty as i64) as c_int, proto) })
+    ret(unsafe { __cosmo_real_socket(gen::af().to_host(domain as i64) as c_int, gen::sock().to_host(ty as i64) as c_int, proto) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_socketpair(domain: c_int, ty: c_int, proto: c_int, sv: *mut c_int) -> c_int {
-    ret(unsafe { __real_socketpair(gen::af().to_host(domain as i64) as c_int, gen::sock().to_host(ty as i64) as c_int, proto, sv) })
+    ret(unsafe { __cosmo_real_socketpair(gen::af().to_host(domain as i64) as c_int, gen::sock().to_host(ty as i64) as c_int, proto, sv) })
 }
 /// (level, name) in host numbering. Levels: SOL_SOCKET is in the `so` group;
 /// IPPROTO_* are the same everywhere. Option names are per level.
@@ -203,13 +197,13 @@ fn sockopt(level: c_int, name: c_int) -> (c_int, c_int) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_setsockopt(fd: c_int, level: c_int, name: c_int, val: *const c_void, len: u32) -> c_int {
     let (l, n) = sockopt(level, name);
-    ret(unsafe { __real_setsockopt(fd, l, n, val, len) })
+    ret(unsafe { __cosmo_real_setsockopt(fd, l, n, val, len) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getsockopt(fd: c_int, level: c_int, name: c_int, val: *mut c_void, len: *mut u32) -> c_int {
     const SO_ERROR_LINUX: c_int = 4; const SO_TYPE_LINUX: c_int = 3;
     let (l, n) = sockopt(level, name);
-    let r = unsafe { __real_getsockopt(fd, l, n, val, len) };
+    let r = unsafe { __cosmo_real_getsockopt(fd, l, n, val, len) };
     if r == -1 { fix_errno(); return r; }
     // Results that are themselves constants.
     if level == 1 && !val.is_null() && unsafe { *len } >= 4 {
@@ -221,19 +215,19 @@ pub unsafe extern "C" fn __wrap_getsockopt(fd: c_int, level: c_int, name: c_int,
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_send(fd: c_int, buf: *const c_void, n: usize, flags: c_int) -> isize {
-    rets(unsafe { __real_send(fd, buf, n, msg_flags(flags)) })
+    rets(unsafe { __cosmo_real_send(fd, buf, n, msg_flags(flags)) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_sendto(fd: c_int, buf: *const c_void, n: usize, flags: c_int, addr: *const c_void, alen: u32) -> isize {
-    unsafe { with_host_addr(addr, alen, |a| rets(__real_sendto(fd, buf, n, msg_flags(flags), a, alen))) }
+    unsafe { with_host_addr(addr, alen, |a| rets(__cosmo_real_sendto(fd, buf, n, msg_flags(flags), a, alen))) }
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_recv(fd: c_int, buf: *mut c_void, n: usize, flags: c_int) -> isize {
-    rets(unsafe { __real_recv(fd, buf, n, msg_flags(flags)) })
+    rets(unsafe { __cosmo_real_recv(fd, buf, n, msg_flags(flags)) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_recvfrom(fd: c_int, buf: *mut c_void, n: usize, flags: c_int, addr: *mut c_void, alen: *mut u32) -> isize {
-    let r = rets(unsafe { __real_recvfrom(fd, buf, n, msg_flags(flags), addr, alen) });
+    let r = rets(unsafe { __cosmo_real_recvfrom(fd, buf, n, msg_flags(flags), addr, alen) });
     if r >= 0 { unsafe { family_to_linux(addr as *mut u16); } }
     r
 }
@@ -241,17 +235,17 @@ pub unsafe extern "C" fn __wrap_recvfrom(fd: c_int, buf: *mut c_void, n: usize, 
 pub unsafe extern "C" fn __wrap_sendmsg(fd: c_int, msg: *const MsgHdr, flags: c_int) -> isize {
     // The name pointer inside the header is const to the caller; rewrite through a copy of the header.
     let m = unsafe { &*msg };
-    if m.name.is_null() { return rets(unsafe { __real_sendmsg(fd, msg, msg_flags(flags)) }); }
+    if m.name.is_null() { return rets(unsafe { __cosmo_real_sendmsg(fd, msg, msg_flags(flags)) }); }
     unsafe {
         with_host_addr(m.name, m.namelen, |a| {
             let copy = MsgHdr { name: a as *mut c_void, namelen: m.namelen, iov: m.iov, iovlen: m.iovlen, control: m.control, controllen: m.controllen, flags: m.flags };
-            rets(__real_sendmsg(fd, &copy, msg_flags(flags)))
+            rets(__cosmo_real_sendmsg(fd, &copy, msg_flags(flags)))
         })
     }
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_recvmsg(fd: c_int, msg: *mut MsgHdr, flags: c_int) -> isize {
-    let r = rets(unsafe { __real_recvmsg(fd, msg, msg_flags(flags)) });
+    let r = rets(unsafe { __cosmo_real_recvmsg(fd, msg, msg_flags(flags)) });
     if r >= 0 {
         unsafe {
             family_to_linux((*msg).name as *mut u16);
@@ -268,7 +262,7 @@ pub unsafe extern "C" fn __wrap_getaddrinfo(node: *const c_char, service: *const
         h_copy = AddrInfo { flags: h.flags, family: gen::af().to_host(h.family as i64) as c_int, socktype: gen::sock().to_host(h.socktype as i64) as c_int, protocol: h.protocol, addrlen: 0, addr: core::ptr::null_mut(), canonname: core::ptr::null_mut(), next: core::ptr::null_mut() };
         &mut h_copy as *const AddrInfo
     };
-    let r = unsafe { __real_getaddrinfo(node, service, hp, res) };
+    let r = unsafe { __cosmo_real_getaddrinfo(node, service, hp, res) };
     if r != 0 { fix_errno(); return r; }   // EAI_SYSTEM reads errno
     // Every result carries the host's family twice: in ai_family and in the sockaddr.
     let mut p = unsafe { *res };
@@ -286,7 +280,7 @@ pub unsafe extern "C" fn __wrap_getaddrinfo(node: *const c_char, service: *const
 pub unsafe extern "C" fn __wrap_freeaddrinfo(ai: *mut AddrInfo) {
     // Undo what __wrap_getaddrinfo did before handing the list back to cosmo's allocator walk;
     // it only frees, but keep its view consistent.
-    unsafe { __real_freeaddrinfo(ai) }
+    unsafe { __cosmo_real_freeaddrinfo(ai) }
 }
 
 // ---- clocks ----------------------------------------------------------------------
@@ -296,21 +290,21 @@ pub unsafe extern "C" fn __wrap_freeaddrinfo(ai: *mut AddrInfo) {
 // first `Instant::now()` on a Mac fails with EINVAL and std panics before the
 // program has done anything.
 unsafe extern "C" {
-    fn __real_clock_gettime(id: c_int, ts: *mut c_void) -> c_int;
-    fn __real_clock_nanosleep(id: c_int, flags: c_int, req: *const c_void, rem: *mut c_void) -> c_int;
+    fn __cosmo_real_clock_gettime(id: c_int, ts: *mut c_void) -> c_int;
+    fn __cosmo_real_clock_nanosleep(id: c_int, flags: c_int, req: *const c_void, rem: *mut c_void) -> c_int;
 }
 
 #[inline] fn clockid(id: c_int) -> c_int { gen::clock().to_host(id as i64) as c_int }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_clock_gettime(id: c_int, ts: *mut c_void) -> c_int {
-    ret(unsafe { __real_clock_gettime(clockid(id), ts) })
+    ret(unsafe { __cosmo_real_clock_gettime(clockid(id), ts) })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_clock_nanosleep(id: c_int, flags: c_int, req: *const c_void, rem: *mut c_void) -> c_int {
     // clock_nanosleep reports failure as a positive errno, not -1/errno.
-    let r = unsafe { __real_clock_nanosleep(clockid(id), flags, req, rem) };
+    let r = unsafe { __cosmo_real_clock_nanosleep(clockid(id), flags, req, rem) };
     if r != 0 { xlate::errno_to_linux(r as i64) as c_int } else { 0 }
 }
 
@@ -320,7 +314,7 @@ pub unsafe extern "C" fn __wrap_poll(fds: *mut PollFd, n: u64, timeout: c_int) -
     let g = gen::poll();
     let s = unsafe { core::slice::from_raw_parts_mut(fds, n as usize) };
     for p in s.iter_mut() { p.events = g.to_host(p.events as i64) as i16; }
-    let r = unsafe { __real_poll(fds, n, timeout) };
+    let r = unsafe { __cosmo_real_poll(fds, n, timeout) };
     for p in s.iter_mut() { p.events = g.to_linux(p.events as i64) as i16; p.revents = g.to_linux(p.revents as i64) as i16; }
     ret(r)
 }
@@ -334,28 +328,28 @@ pub unsafe extern "C" fn __wrap_sigaction(signum: c_int, act: *const SigAction, 
         a_copy = SigAction { handler: a.handler, flags: gen::sigact().to_host(a.flags as i64) as u64, restorer: a.restorer, mask: a.mask };
         &mut a_copy as *const SigAction
     };
-    let r = unsafe { __real_sigaction(sig(signum), ap, old) };
+    let r = unsafe { __cosmo_real_sigaction(sig(signum), ap, old) };
     if r == -1 { fix_errno(); return r; }
     if !old.is_null() { unsafe { (*old).flags = gen::sigact().to_linux((*old).flags as i64) as u64; } }
     r
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_signal(signum: c_int, handler: usize) -> usize {
-    let r = unsafe { __real_signal(sig(signum), handler) };
+    let r = unsafe { __cosmo_real_signal(sig(signum), handler) };
     if r == usize::MAX { fix_errno(); }
     r
 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_kill(pid: c_int, signum: c_int) -> c_int { ret(unsafe { __real_kill(pid, sig(signum)) }) }
+pub unsafe extern "C" fn __wrap_kill(pid: c_int, signum: c_int) -> c_int { ret(unsafe { __cosmo_real_kill(pid, sig(signum)) }) }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_killpg(pgrp: c_int, signum: c_int) -> c_int { ret(unsafe { __real_killpg(pgrp, sig(signum)) }) }
+pub unsafe extern "C" fn __wrap_killpg(pgrp: c_int, signum: c_int) -> c_int { ret(unsafe { __cosmo_real_killpg(pgrp, sig(signum)) }) }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_sigaddset(set: *mut c_void, signum: c_int) -> c_int { ret(unsafe { __real_sigaddset(set, sig(signum)) }) }
+pub unsafe extern "C" fn __wrap_sigaddset(set: *mut c_void, signum: c_int) -> c_int { ret(unsafe { __cosmo_real_sigaddset(set, sig(signum)) }) }
 
 // ---- processes -------------------------------------------------------------------
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int {
-    let r = unsafe { __real_waitpid(pid, status, gen::waitpid().to_host(options as i64) as c_int) };
+    let r = unsafe { __cosmo_real_waitpid(pid, status, gen::waitpid().to_host(options as i64) as c_int) };
     if r == -1 { fix_errno(); return r; }
     // The wait status encodes the signal number for WIFSIGNALED/WIFSTOPPED.
     if r > 0 && !status.is_null() {

@@ -141,6 +141,14 @@ else
       "$(ape ./target/cosmo/release/cross-os-probe.com 2>&1)" "0 unexpected"
 fi
 
+# ------------------------------------------------ cosmo's calls to itself
+banner "cosmo-internal calls bypass the wrappers"
+cd "$REPO/examples/cross-os-probe" || exit 1
+cargo cosmo build --release >/dev/null || exit 1
+probe=$(ape ./target/cosmo/release/cross-os-probe.com 2>&1)
+check "fs::canonicalize resolves a plain file" "$probe" "resolved=/"
+check "read_link on a plain file reports Linux's EINVAL" "$probe" "err=InvalidInput"
+
 # ------------------------------------------------------ aarch64 reserved regs
 banner "aarch64 honours cosmo's reserved x18/x28"
 aarch64-linux-cosmo-objdump -d \

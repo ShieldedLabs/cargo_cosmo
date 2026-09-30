@@ -247,6 +247,30 @@ fn main() {
       }
       go().unwrap_or_else(|e| format!("io error: {}", e))
    });
+   // cosmo's realpath calls readlink on every component and reads EINVAL as
+   // "not a symlink". If our readlink wrapper catches that internal call, the
+   // EINVAL comes back Linux-numbered and realpath fails on Windows (87 != 22).
+   stage("canonicalize", || {
+      fn go() -> std::io::Result<String> {
+         let p = std::env::temp_dir().join("cosmo-probe-canon.txt");
+         std::fs::write(&p, b"xyz")?;
+         let r = std::fs::canonicalize(&p);
+         std::fs::remove_file(&p).ok();
+         Ok(format!("resolved={}", r?.display()))
+      }
+      go().unwrap_or_else(|e| format!("io error: {}", e))
+   });
+   // The same errno reaching std, which must still see Linux's EINVAL.
+   stage("read_link on a file", || {
+      let p = std::env::temp_dir().join("cosmo-probe-link.txt");
+      let _ = std::fs::write(&p, b"xyz");
+      let r = std::fs::read_link(&p);
+      std::fs::remove_file(&p).ok();
+      match r {
+         Ok(t) => format!("unexpectedly a link to {}", t.display()),
+         Err(e) => format!("err={:?} ({})", e.kind(), e),
+      }
+   });
    stage("dir listing", || {
       let n = std::fs::read_dir(std::env::temp_dir())
          .map(|d| d.count()).unwrap_or(0);

@@ -51,14 +51,14 @@ GROUPS = {
 # what needs no translation (malloc/free/environ/strnlen/gai_strerror/abort/
 # exit/_exit/sigemptyset/pthread_self/pthread_getspecific/getauxval/getenv/
 # setenv/unsetenv/getpid/getppid/gettid/getuid/sched_yield). Each entry says
-# what the wrapper does after `__real_*` returns:
+# what the wrapper does after `__cosmo_real_*` returns:
 #   int   -1 means errno was set: translate it in place
 #   ptr   NULL means errno was set
 #   code  the return value IS an errno (pthread_*, posix_spawn*, getpwuid_r)
 # Functions whose ARGUMENTS also carry constants are hand-written in shim.rs
 # and listed under HAND so they get --wrap but no generated body.
 # Not wrapped: pidfd_spawnp/pidfd_getpid -- std imports them WEAK (null when
-# absent, which cosmo lacks); a wrapper's __real_ reference would be strong.
+# absent, which cosmo lacks); a wrapper's __cosmo_real_ reference would be strong.
 PASSTHROUGH = {
    "int": """accept4 bind chdir chmod chown chroot close closedir connect
       copy_file_range dirfd dup dup2 execvp fchmod fchown fdatasync flock fork
@@ -183,10 +183,10 @@ def main():
    rs.append("// six-register signature therefore forwards any of them unchanged.")
    for kind, fns in PASSTHROUGH.items():
       for f in fns:
-         rs.append("unsafe extern \"C\" { fn __real_" + f + "(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }")
+         rs.append("unsafe extern \"C\" { fn __cosmo_real_" + f + "(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }")
          rs.append("#[unsafe(no_mangle)]")
          rs.append(f"pub unsafe extern \"C\" fn __wrap_{f}(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {{")
-         rs.append(f"    let r = unsafe {{ __real_{f}(a, b, c, d, e, f) }};")
+         rs.append(f"    let r = unsafe {{ __cosmo_real_{f}(a, b, c, d, e, f) }};")
          if kind == "int":
             rs.append("    if r as i32 == -1 { crate::shim::fix_errno(); }")
             rs.append("    r")

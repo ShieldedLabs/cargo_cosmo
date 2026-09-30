@@ -1238,623 +1238,623 @@ pub fn rlimit() -> Group {
 // floats, no structs by value), which the SysV and AAPCS conventions pass in the
 // first six/eight integer registers regardless of declared type; an untyped
 // six-register signature therefore forwards any of them unchanged.
-unsafe extern "C" { fn __real_accept4(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_accept4(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_accept4(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_accept4(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_accept4(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_bind(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_bind(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_bind(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_bind(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_bind(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_chdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_chdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_chdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_chdir(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_chdir(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_chmod(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_chmod(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_chmod(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_chmod(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_chmod(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_chown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_chown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_chown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_chown(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_chown(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_chroot(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_chroot(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_chroot(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_chroot(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_chroot(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_close(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_close(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_close(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_close(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_close(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_closedir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_closedir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_closedir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_closedir(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_closedir(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_connect(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_connect(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_connect(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_connect(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_connect(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_copy_file_range(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_copy_file_range(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_copy_file_range(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_copy_file_range(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_copy_file_range(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_dirfd(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_dirfd(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_dirfd(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_dirfd(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_dirfd(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_dup(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_dup(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_dup(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_dup(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_dup(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_dup2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_dup2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_dup2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_dup2(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_dup2(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_execvp(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_execvp(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_execvp(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_execvp(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_execvp(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_fchmod(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_fchmod(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fchmod(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_fchmod(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_fchmod(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_fchown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_fchown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fchown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_fchown(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_fchown(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_fdatasync(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_fdatasync(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fdatasync(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_fdatasync(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_fdatasync(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_flock(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_flock(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_flock(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_flock(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_flock(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_fork(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_fork(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fork(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_fork(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_fork(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_fstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_fstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_fstat(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_fstat(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_fsync(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_fsync(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fsync(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_fsync(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_fsync(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_ftruncate(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_ftruncate(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_ftruncate(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_ftruncate(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_ftruncate(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_futimens(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_futimens(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_futimens(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_futimens(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_futimens(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_gethostname(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_gethostname(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_gethostname(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_gethostname(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_gethostname(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_getpeername(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_getpeername(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getpeername(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_getpeername(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_getpeername(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_getrandom(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_getrandom(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getrandom(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_getrandom(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_getrandom(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_getsockname(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_getsockname(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getsockname(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_getsockname(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_getsockname(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_lchown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_lchown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_lchown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_lchown(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_lchown(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_listen(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_listen(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_listen(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_listen(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_listen(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_lseek(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_lseek(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_lseek(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_lseek(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_lseek(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_lstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_lstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_lstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_lstat(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_lstat(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_mkdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_mkdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_mkdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_mkdir(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_mkdir(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_mkfifo(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_mkfifo(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_mkfifo(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_mkfifo(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_mkfifo(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_munmap(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_munmap(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_munmap(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_munmap(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_munmap(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_pause(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pause(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pause(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pause(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pause(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_pipe2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pipe2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pipe2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pipe2(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pipe2(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_pread(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pread(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pread(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pread(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pread(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_preadv(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_preadv(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_preadv(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_preadv(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_preadv(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_pwrite(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pwrite(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pwrite(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pwrite(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pwrite(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_pwritev(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pwritev(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pwritev(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pwritev(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pwritev(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_read(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_read(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_read(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_read(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_read(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_readlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_readlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_readlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_readlink(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_readlink(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_readv(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_readv(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_readv(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_readv(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_readv(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_rename(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_rename(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_rename(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_rename(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_rename(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_rmdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_rmdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_rmdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_rmdir(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_rmdir(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_sched_getaffinity(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_sched_getaffinity(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_sched_getaffinity(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_sched_getaffinity(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_sched_getaffinity(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_sendfile(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_sendfile(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_sendfile(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_sendfile(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_sendfile(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_setgid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_setgid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_setgid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_setgid(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_setgid(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_setgroups(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_setgroups(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_setgroups(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_setgroups(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_setgroups(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_setpgid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_setpgid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_setpgid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_setpgid(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_setpgid(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_setsid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_setsid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_setsid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_setsid(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_setsid(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_setuid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_setuid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_setuid(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_setuid(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_setuid(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_splice(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_splice(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_splice(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_splice(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_splice(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_stat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_stat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_stat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_stat(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_stat(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_symlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_symlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_symlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_symlink(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_symlink(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_sysconf(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_sysconf(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_sysconf(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_sysconf(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_sysconf(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_syscall(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_syscall(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_unlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_unlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_unlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_unlink(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_unlink(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_write(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_write(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_write(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_write(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_write(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_writev(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_writev(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_writev(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_writev(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_writev(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_shutdown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_shutdown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_shutdown(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_shutdown(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_shutdown(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_mprotect(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_mprotect(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_mprotect(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_mprotect(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_mprotect(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_sigaltstack(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_sigaltstack(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_sigaltstack(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_sigaltstack(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_sigaltstack(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_fdopendir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_fdopendir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fdopendir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_fdopendir(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_fdopendir(a, b, c, d, e, f) };
     if r == 0 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_getcwd(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_getcwd(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getcwd(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_getcwd(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_getcwd(a, b, c, d, e, f) };
     if r == 0 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_opendir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_opendir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_opendir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_opendir(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_opendir(a, b, c, d, e, f) };
     if r == 0 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_readdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_readdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_readdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_readdir(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_readdir(a, b, c, d, e, f) };
     if r == 0 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_realpath(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_realpath(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_realpath(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_realpath(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_realpath(a, b, c, d, e, f) };
     if r == 0 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __real_getpwuid_r(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_getpwuid_r(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getpwuid_r(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_getpwuid_r(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_getpwuid_r(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawnattr_destroy(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawnattr_destroy(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawnattr_destroy(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawnattr_destroy(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawnattr_destroy(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawnattr_init(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawnattr_init(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawnattr_init(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawnattr_init(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawnattr_init(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawnattr_setflags(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawnattr_setflags(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawnattr_setflags(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawnattr_setflags(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawnattr_setflags(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawnattr_setpgroup(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawnattr_setpgroup(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawnattr_setpgroup(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawnattr_setpgroup(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawnattr_setpgroup(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawnattr_setsigdefault(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawnattr_setsigdefault(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawnattr_setsigdefault(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawnattr_setsigdefault(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawnattr_setsigdefault(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawn_file_actions_addchdir_np(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawn_file_actions_addchdir_np(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawn_file_actions_addchdir_np(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawn_file_actions_addchdir_np(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawn_file_actions_addchdir_np(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawn_file_actions_adddup2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawn_file_actions_adddup2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawn_file_actions_adddup2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawn_file_actions_adddup2(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawn_file_actions_adddup2(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawn_file_actions_destroy(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawn_file_actions_destroy(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawn_file_actions_destroy(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawn_file_actions_destroy(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawn_file_actions_destroy(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawn_file_actions_init(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawn_file_actions_init(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawn_file_actions_init(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawn_file_actions_init(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawn_file_actions_init(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_posix_spawnp(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_posix_spawnp(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_posix_spawnp(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_posix_spawnp(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_posix_spawnp(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_attr_destroy(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_attr_destroy(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_attr_destroy(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_attr_destroy(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_attr_destroy(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_attr_getguardsize(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_attr_getguardsize(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_attr_getguardsize(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_attr_getguardsize(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_attr_getguardsize(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_attr_getstack(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_attr_getstack(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_attr_getstack(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_attr_getstack(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_attr_getstack(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_attr_init(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_attr_init(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_attr_init(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_attr_init(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_attr_init(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_attr_setstacksize(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_attr_setstacksize(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_attr_setstacksize(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_attr_setstacksize(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_attr_setstacksize(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_create(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_create(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_create(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_create(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_create(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_detach(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_detach(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_detach(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_detach(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_detach(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_getattr_np(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_getattr_np(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_getattr_np(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_getattr_np(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_getattr_np(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_join(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_join(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_join(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_join(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_join(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_key_create(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_key_create(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_key_create(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_key_create(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_key_create(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_key_delete(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_key_delete(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_key_delete(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_key_delete(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_key_delete(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_setname_np(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_setname_np(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_setname_np(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_setname_np(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_setname_np(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
-unsafe extern "C" { fn __real_pthread_setspecific(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
+unsafe extern "C" { fn __cosmo_real_pthread_setspecific(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pthread_setspecific(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __real_pthread_setspecific(a, b, c, d, e, f) };
+    let r = unsafe { __cosmo_real_pthread_setspecific(a, b, c, d, e, f) };
     crate::xlate::errno_to_linux(r as i32 as i64) as isize
 }
