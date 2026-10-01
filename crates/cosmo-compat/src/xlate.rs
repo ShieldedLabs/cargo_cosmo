@@ -68,19 +68,25 @@ impl Group {
         if self.identity { return v; }
         match self.kind {
             // Aliases share a Linux number -- AF_UNIX, AF_LOCAL and AF_FILE are
-            // all 1 -- and 0/-1 mark a constant the host lacks, so the first row
-            // mentioning the value is not the one to use: AF_UNIX must not come
-            // out as AF_FILE's -1 (EAFNOSUPPORT on the first socketpair). Prefer
-            // a name the host has; if none has one, the absent marker it is.
+            // all 1 -- so the first row mentioning the value need not be the one
+            // to use. When the host lacks that name (-1) but has another alias,
+            // the alias is the constant: AF_UNIX must not come out as AF_FILE's
+            // -1 (EAFNOSUPPORT on the first socketpair). A first name the host
+            // does have always stands, absent markers that only look like 0
+            // included -- SOL_SOCKET is 1 in Linux and 65535 here, SO_DEBUG is
+            // the alias that keeps the number.
             Kind::Enum => {
-                let mut absent = None;
+                let mut first = None;
                 for (i, &l) in self.linux.iter().enumerate() {
                     if l != v { continue; }
-                    let h = self.host[i];
-                    if h != 0 && h != -1 { return h; }
-                    if absent.is_none() { absent = Some(h); }
+                    if first.is_none() {
+                        if self.host[i] != -1 { return self.host[i]; }
+                        first = Some(self.host[i]);
+                        continue;
+                    }
+                    if self.host[i] != -1 && self.host[i] != 0 { return self.host[i]; }
                 }
-                absent.unwrap_or(v)
+                first.unwrap_or(v)
             }
             Kind::Mask => mask(v, self.linux, self.host, false),
         }
