@@ -114,6 +114,39 @@ if [ -n "$WRAPS" ]; then
 fi
 
 # shellcheck disable=SC2086  # word splitting is the point for these flag sets
+  # The same rename for the C code rustc bundles inside rlibs (rocksdb and its
+  # friends): those objects call the wrapped names too, and --wrap would route
+  # them through translators written for Rust's Linux-numbered ABI. C speaks
+  # cosmo's own host-numbered ABI, so its flags, errno values and struct layouts
+  # come back wrong -- stat's layout is the measured case, and it breaks the
+  # database that way. An rlib carrying native objects is one of those; link a
+  # renamed copy instead, beside the original and cached the same way. Pure
+  # Rust rlibs keep their references, which is what they want: those calls do
+  # need translating.
+  if [ -n "$WRAPS" ]; then
+     for A in $ARGS; do
+        case "$A" in
+           *.rlib) ;;
+           *) continue ;;
+        esac
+        if ! "$BIN/$ARCH-linux-cosmo-ar" t "$A" 2>/dev/null | grep -qv '\.rcgu\.o$\|^lib\.rmeta'; then
+           continue
+        fi
+        OUT="$A.native.a"
+        if [ ! -f "$OUT" ] || [ "$A" -nt "$OUT" ]; then
+           TMP="$OUT.$$"
+           for wrap in $WRAPS; do
+              sym=${wrap#-Wl,--wrap=}
+              printf '%s __cosmo_real_%s\n' "$sym" "$sym"
+           done > "$TMP.syms"
+           "$BIN/$ARCH-linux-cosmo-objcopy" --redefine-syms="$TMP.syms" "$A" "$TMP"
+           rm -f "$TMP.syms"
+           mv -f "$TMP" "$OUT"
+        fi
+        ARGS="$(printf '%s\n' "$ARGS" | sed "s|$A|$OUT|")"
+     done
+  fi
+
 "$CC" -o "$OUTPUT" $CRT $COMMON $ARCHFLAGS $WRAPS $ARGS "$LIBCOSMO"
 
 # cosmocc runs this on every linked image; it rewrites the ELF into the shape
