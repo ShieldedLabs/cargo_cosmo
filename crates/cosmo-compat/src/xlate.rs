@@ -67,7 +67,21 @@ impl Group {
     pub fn to_host(&self, v: i64) -> i64 {
         if self.identity { return v; }
         match self.kind {
-            Kind::Enum => match self.linux.iter().position(|&l| l == v) { Some(i) => self.host[i], None => v },
+            // Aliases share a Linux number -- AF_UNIX, AF_LOCAL and AF_FILE are
+            // all 1 -- and 0/-1 mark a constant the host lacks, so the first row
+            // mentioning the value is not the one to use: AF_UNIX must not come
+            // out as AF_FILE's -1 (EAFNOSUPPORT on the first socketpair). Prefer
+            // a name the host has; if none has one, the absent marker it is.
+            Kind::Enum => {
+                let mut absent = None;
+                for (i, &l) in self.linux.iter().enumerate() {
+                    if l != v { continue; }
+                    let h = self.host[i];
+                    if h != 0 && h != -1 { return h; }
+                    if absent.is_none() { absent = Some(h); }
+                }
+                absent.unwrap_or(v)
+            }
             Kind::Mask => mask(v, self.linux, self.host, false),
         }
     }
@@ -204,6 +218,16 @@ mod tests {
         assert_eq!(so.to_host(l(&so, "SOL_SOCKET")), w(&so, "SOL_SOCKET"));
         assert_eq!(so.to_host(l(&so, "SO_ERROR")), w(&so, "SO_ERROR"));
         assert_eq!(msg.to_host(l(&msg, "MSG_NOSIGNAL")), w(&msg, "MSG_NOSIGNAL"));
+    }
+
+    #[test]
+    fn aliases_prefer_a_name_the_host_has() {
+        // Linux's AF_UNIX, AF_LOCAL and AF_FILE are all 1, and AF_FILE's row
+        // comes first carrying an absent marker: a first-match lookup turns
+        // AF_UNIX into -1, which is EAFNOSUPPORT on the first socketpair.
+        let g = gen::af();
+        assert_eq!(g.to_host(l(&g, "AF_UNIX")), w(&g, "AF_UNIX"));
+        assert_eq!(g.to_host(l(&g, "AF_LOCAL")), w(&g, "AF_LOCAL"));
     }
 
     #[test]
