@@ -176,6 +176,15 @@ pub unsafe extern "C" fn __wrap_socket(domain: c_int, ty: c_int, proto: c_int) -
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_socketpair(domain: c_int, ty: c_int, proto: c_int, sv: *mut c_int) -> c_int {
+    // Cosmopolitan's socketpair() is a stub on Windows (ENOSYS). The
+    // self-pipe / wakeup-fd pattern (mio, tokio, polling) needs it, so on a
+    // Windows host fall back to a connected localhost TCP pair, which works
+    // for stream sockets there. Everywhere else, and for datagram pairs,
+    // cosmo's own call stands.
+    unsafe extern "C" { static __hostos: c_int; }
+    if unsafe { __hostos } == 4 && crate::socketpair::supported(domain, ty, proto) {
+        return unsafe { crate::socketpair::tcp_socketpair(ty, sv) };
+    }
     ret(unsafe { __cosmo_real_socketpair(gen::af().to_host(domain as i64) as c_int, gen::sock().to_host(ty as i64) as c_int, proto, sv) })
 }
 /// (level, name) in host numbering. Levels: SOL_SOCKET is in the `so` group;
