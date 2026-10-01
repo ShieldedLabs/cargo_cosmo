@@ -1238,13 +1238,6 @@ pub fn rlimit() -> Group {
 // floats, no structs by value), which the SysV and AAPCS conventions pass in the
 // first six/eight integer registers regardless of declared type; an untyped
 // six-register signature therefore forwards any of them unchanged.
-unsafe extern "C" { fn __cosmo_real_bind(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_bind(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_bind(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
 unsafe extern "C" { fn __cosmo_real_chdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_chdir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
@@ -1284,13 +1277,6 @@ unsafe extern "C" { fn __cosmo_real_closedir(a: usize, b: usize, c: usize, d: us
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_closedir(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
     let r = unsafe { __cosmo_real_closedir(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
-unsafe extern "C" { fn __cosmo_real_connect(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_connect(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_connect(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
@@ -1392,24 +1378,10 @@ pub unsafe extern "C" fn __wrap_gethostname(a: usize, b: usize, c: usize, d: usi
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __cosmo_real_getpeername(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_getpeername(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_getpeername(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
 unsafe extern "C" { fn __cosmo_real_getrandom(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getrandom(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
     let r = unsafe { __cosmo_real_getrandom(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
-unsafe extern "C" { fn __cosmo_real_getsockname(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_getsockname(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_getsockname(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
@@ -1508,13 +1480,6 @@ unsafe extern "C" { fn __cosmo_real_readv(a: usize, b: usize, c: usize, d: usize
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_readv(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
     let r = unsafe { __cosmo_real_readv(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
-unsafe extern "C" { fn __cosmo_real_rename(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_rename(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_rename(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }

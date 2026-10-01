@@ -41,6 +41,10 @@ unsafe extern "C" {
     fn __cosmo_real_getsockopt(fd: c_int, level: c_int, name: c_int, val: *mut c_void, len: *mut u32) -> c_int;
     fn __cosmo_real_send(fd: c_int, buf: *const c_void, n: usize, flags: c_int) -> isize;
     fn __cosmo_real_sendto(fd: c_int, buf: *const c_void, n: usize, flags: c_int, addr: *const c_void, alen: u32) -> isize;
+    fn __cosmo_real_bind(fd: c_int, addr: *const c_void, alen: u32) -> c_int;
+    fn __cosmo_real_connect(fd: c_int, addr: *const c_void, alen: u32) -> c_int;
+    fn __cosmo_real_getsockname(fd: c_int, addr: *mut c_void, alen: *mut u32) -> c_int;
+    fn __cosmo_real_getpeername(fd: c_int, addr: *mut c_void, alen: *mut u32) -> c_int;
     fn __cosmo_real_recv(fd: c_int, buf: *mut c_void, n: usize, flags: c_int) -> isize;
     fn __cosmo_real_recvfrom(fd: c_int, buf: *mut c_void, n: usize, flags: c_int, addr: *mut c_void, alen: *mut u32) -> isize;
     fn __cosmo_real_sendmsg(fd: c_int, msg: *const MsgHdr, flags: c_int) -> isize;
@@ -315,6 +319,33 @@ pub unsafe extern "C" fn __wrap_getsockopt(fd: c_int, level: c_int, name: c_int,
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_send(fd: c_int, buf: *const c_void, n: usize, flags: c_int) -> isize {
     rets(unsafe { __cosmo_real_send(fd, buf, n, msg_flags(flags)) })
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_rename(old: *const c_char, new: *const c_char) -> c_int {
+    // Not __cosmo_real_rename: that fails in cosmo's userspace without ever
+    // reaching the kernel (reproduced in isolation). renameat is the call it
+    // would have made, and it works.
+    ret(unsafe { __cosmo_real_renameat(at_fd(-100), old, at_fd(-100), new) })
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_bind(fd: c_int, addr: *const c_void, alen: u32) -> c_int {
+    unsafe { with_host_addr(addr, alen, |a| ret(__cosmo_real_bind(fd, a, alen))) }
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_connect(fd: c_int, addr: *const c_void, alen: u32) -> c_int {
+    unsafe { with_host_addr(addr, alen, |a| ret(__cosmo_real_connect(fd, a, alen))) }
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_getsockname(fd: c_int, addr: *mut c_void, alen: *mut u32) -> c_int {
+    let r = ret(unsafe { __cosmo_real_getsockname(fd, addr, alen) });
+    if r == 0 { unsafe { family_to_linux(addr as *mut u16); } }
+    r
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_getpeername(fd: c_int, addr: *mut c_void, alen: *mut u32) -> c_int {
+    let r = ret(unsafe { __cosmo_real_getpeername(fd, addr, alen) });
+    if r == 0 { unsafe { family_to_linux(addr as *mut u16); } }
+    r
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_sendto(fd: c_int, buf: *const c_void, n: usize, flags: c_int, addr: *const c_void, alen: u32) -> isize {

@@ -1,6 +1,6 @@
 [package]
 name = "cosmo-compat"
-version = "6.0.4"
+version = "6.0.5"
 edition = "2021"
 rust-version = "1.74"
 license = "MIT"
@@ -17,6 +17,13 @@ name = "cosmo_compat"
 path = "src/lib.rs"
 
 [dependencies]
+# tempfile and its friends call rustix, whose default backend emits raw Linux
+# syscalls that never reach cosmo's translation layer -- rename is the measured
+# casualty: it fails in userspace and no syscall is ever seen. Forcing rustix's
+# libc backend routes those calls through the __wrap_ translators like any other
+# libc call. Cargo's feature unification applies this to every rustix in the
+# build, not just ours.
+rustix = { version = "1", features = ["use-libc"] }
 # Only for the shape of the structs std passes in: libc::stat and
 # libc::sigaction are per-target, and the shims convert between them and
 # cosmopolitan's fixed layouts.

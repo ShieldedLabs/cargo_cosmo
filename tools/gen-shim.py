@@ -60,12 +60,12 @@ GROUPS = {
 # Not wrapped: pidfd_spawnp/pidfd_getpid -- std imports them WEAK (null when
 # absent, which cosmo lacks); a wrapper's __cosmo_real_ reference would be strong.
 PASSTHROUGH = {
-   "int": """bind chdir chmod chown chroot close closedir connect
+   "int": """ chdir chmod chown chroot close closedir 
       copy_file_range dirfd dup dup2 execvp fchmod fchown fdatasync flock fork
-      fsync ftruncate futimens gethostname getpeername getrandom
-      getsockname lchown listen lseek mkdir mkfifo munmap pause
+      fsync ftruncate futimens gethostname  getrandom
+       lchown listen lseek mkdir mkfifo munmap pause
       pread preadv pwrite pwritev read readlink
-      readv rename rmdir sched_getaffinity sendfile setgid setgroups setpgid
+      readv rmdir sched_getaffinity sendfile setgid setgroups setpgid
       setsid setuid splice symlink sysconf syscall unlink write writev
       shutdown mprotect sigaltstack""".split(),
    "ptr": "fdopendir getcwd opendir readdir realpath".split(),
@@ -81,8 +81,9 @@ PASSTHROUGH = {
 }
 HAND = """open openat fcntl ioctl socket socketpair accept4 setsockopt getsockopt send
    sendto recv recvfrom sendmsg recvmsg poll mmap pipe2 sigaction signal kill killpg
-   sigaddset waitpid unlinkat linkat renameat fchmodat utimensat getaddrinfo
-   freeaddrinfo clock_gettime clock_nanosleep stat fstat lstat""".split()
+   sigaddset waitpid unlinkat linkat renameat rename fchmodat utimensat getaddrinfo
+   freeaddrinfo clock_gettime clock_nanosleep stat fstat lstat
+   bind connect getsockname getpeername""".split()
 
 
 def ape(path, *args):
