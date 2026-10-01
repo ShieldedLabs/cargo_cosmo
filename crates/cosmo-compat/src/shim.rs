@@ -514,14 +514,14 @@ pub unsafe extern "C" fn __wrap_waitpid(pid: c_int, status: *mut c_int, options:
 /// tempfile's best-effort metadata -- so answer ENOSYS and let the caller
 /// fall back, exactly as a filesystem without xattr support would.
 #[unsafe(no_mangle)]
-pub extern "C" fn __wrap_setxattr(path: *const i8, name: *const i8, value: *const u8, size: usize, flags: i32) -> i32 {
+pub extern "C" fn setxattr(path: *const i8, name: *const i8, value: *const u8, size: usize, flags: i32) -> i32 {
     let _ = (path, name, value, size, flags);
     unsafe { *__errno_location() = libc::ENOSYS; }
     -1
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __wrap_lsetxattr(path: *const i8, name: *const i8, value: *const u8, size: usize, flags: i32) -> i32 {
+pub extern "C" fn lsetxattr(path: *const i8, name: *const i8, value: *const u8, size: usize, flags: i32) -> i32 {
     let _ = (path, name, value, size, flags);
     unsafe { *__errno_location() = libc::ENOSYS; }
     -1
