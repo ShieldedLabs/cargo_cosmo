@@ -129,7 +129,7 @@ fi
            *.rlib) ;;
            *) continue ;;
         esac
-        if ! "$BIN/$ARCH-linux-cosmo-ar" t "$A" 2>/dev/null | grep -qv '\.rcgu\.o$\|^lib\.rmeta'; then
+        if ! "$BIN/$ARCH-linux-cosmo-ar" t "$A" 2>/dev/null | sed 's/[[:space:]]*$//' | grep -E '\.o$' | grep -qv '\.rcgu\.o$'; then
            continue
         fi
         OUT="$A.native.a"
