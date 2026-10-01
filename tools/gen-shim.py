@@ -62,11 +62,11 @@ GROUPS = {
 PASSTHROUGH = {
    "int": """bind chdir chmod chown chroot close closedir connect
       copy_file_range dirfd dup dup2 execvp fchmod fchown fdatasync flock fork
-      fstat fsync ftruncate futimens gethostname getpeername getrandom
-      getsockname lchown listen lseek lstat mkdir mkfifo munmap pause
+      fsync ftruncate futimens gethostname getpeername getrandom
+      getsockname lchown listen lseek mkdir mkfifo munmap pause
       pread preadv pwrite pwritev read readlink
       readv rename rmdir sched_getaffinity sendfile setgid setgroups setpgid
-      setsid setuid splice stat symlink sysconf syscall unlink write writev
+      setsid setuid splice symlink sysconf syscall unlink write writev
       shutdown mprotect sigaltstack""".split(),
    "ptr": "fdopendir getcwd opendir readdir realpath".split(),
    "code": """getpwuid_r posix_spawnattr_destroy posix_spawnattr_init
@@ -82,7 +82,7 @@ PASSTHROUGH = {
 HAND = """open openat fcntl ioctl socket socketpair accept4 setsockopt getsockopt send
    sendto recv recvfrom sendmsg recvmsg poll mmap pipe2 sigaction signal kill killpg
    sigaddset waitpid unlinkat linkat renameat fchmodat utimensat getaddrinfo
-   freeaddrinfo clock_gettime clock_nanosleep""".split()
+   freeaddrinfo clock_gettime clock_nanosleep stat fstat lstat""".split()
 
 
 def ape(path, *args):

@@ -1364,13 +1364,6 @@ pub unsafe extern "C" fn __wrap_fork(a: usize, b: usize, c: usize, d: usize, e: 
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __cosmo_real_fstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_fstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_fstat(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
 unsafe extern "C" { fn __cosmo_real_fsync(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fsync(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
@@ -1438,13 +1431,6 @@ unsafe extern "C" { fn __cosmo_real_lseek(a: usize, b: usize, c: usize, d: usize
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_lseek(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
     let r = unsafe { __cosmo_real_lseek(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
-unsafe extern "C" { fn __cosmo_real_lstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_lstat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_lstat(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
@@ -1592,13 +1578,6 @@ unsafe extern "C" { fn __cosmo_real_splice(a: usize, b: usize, c: usize, d: usiz
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_splice(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
     let r = unsafe { __cosmo_real_splice(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
-unsafe extern "C" { fn __cosmo_real_stat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_stat(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_stat(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }

@@ -28,6 +28,9 @@ unsafe extern "C" {
     fn __errno_location() -> *mut c_int;
     fn __cosmo_real_open(path: *const c_char, flags: c_int, ...) -> c_int;
     fn __cosmo_real_openat(dirfd: c_int, path: *const c_char, flags: c_int, ...) -> c_int;
+    fn __cosmo_real_stat(path: *const c_char, buf: *mut c_void) -> c_int;
+    fn __cosmo_real_fstat(fd: c_int, buf: *mut c_void) -> c_int;
+    fn __cosmo_real_lstat(path: *const c_char, buf: *mut c_void) -> c_int;
     fn __cosmo_real_fcntl(fd: c_int, cmd: c_int, ...) -> c_int;
     fn __cosmo_real_ioctl(fd: c_int, req: u64, ...) -> c_int;
     fn __cosmo_real_socket(domain: c_int, ty: c_int, proto: c_int) -> c_int;
@@ -44,7 +47,7 @@ unsafe extern "C" {
     fn __cosmo_real_recvmsg(fd: c_int, msg: *mut MsgHdr, flags: c_int) -> isize;
     fn __cosmo_real_poll(fds: *mut PollFd, n: u64, timeout: c_int) -> c_int;
     fn __cosmo_real_mmap(addr: *mut c_void, len: u64, prot: c_int, flags: c_int, fd: c_int, off: i64) -> *mut c_void;
-    fn __cosmo_real_sigaction(sig: c_int, act: *const SigAction, old: *mut SigAction) -> c_int;
+    fn __cosmo_real_sigaction(sig: c_int, act: *const CosmoSigAction, old: *mut CosmoSigAction) -> c_int;
     fn __cosmo_real_signal(sig: c_int, handler: usize) -> usize;
     fn __cosmo_real_kill(pid: c_int, sig: c_int) -> c_int;
     fn __cosmo_real_killpg(pgrp: c_int, sig: c_int) -> c_int;
@@ -63,9 +66,15 @@ unsafe extern "C" {
 pub struct PollFd { fd: i32, events: i16, revents: i16 }
 #[repr(C)]
 pub struct MsgHdr { name: *mut c_void, namelen: u32, iov: *mut c_void, iovlen: u64, control: *mut c_void, controllen: u64, flags: u32 }
-/// Cosmo's layout: {handler/sigaction, sa_flags u64, sa_restorer, sa_mask}.
+/// Cosmopolitan's `struct sigaction`, 32 bytes: {sa_handler, sa_flags,
+/// sa_restorer, sa_mask} with an 8-byte sigset_t -- checked against
+/// `sizeof(struct sigaction)` and the offsets with cosmocc. The caller's
+/// `libc::sigaction` is musl's, 152 bytes with the 128-byte sa_mask *second*,
+/// so reading sa_flags at offset 8 (as this shim did) read inside sa_mask and
+/// installed every handler with flags 0: SA_RESTART, and with it
+/// SA_SIGINFO|SA_ONSTACK for std's stack-overflow handler, was silently lost.
 #[repr(C)]
-pub struct SigAction { handler: usize, flags: u64, restorer: usize, mask: [u64; 2] }
+pub struct CosmoSigAction { handler: usize, flags: c_int, pad: c_int, restorer: usize, mask: u64 }
 /// Linux layout, which cosmo shares.
 #[repr(C)]
 pub struct AddrInfo { flags: c_int, family: c_int, socktype: c_int, protocol: c_int, addrlen: u32, addr: *mut u16, canonname: *mut c_char, next: *mut AddrInfo }
@@ -123,6 +132,66 @@ pub unsafe extern "C" fn __wrap_open(path: *const c_char, flags: c_int, mode: c_
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_openat(dirfd: c_int, path: *const c_char, flags: c_int, mode: c_uint) -> c_int {
     ret(unsafe { __cosmo_real_openat(at_fd(dirfd), path, open_flags(flags), mode) })
+}
+
+/// Cosmopolitan's `struct stat`: 144 bytes, the x86-64 Linux shape on both
+/// arches (checked with cosmocc: sizeof=144, st_mode@24, st_size@48). The
+/// caller's `libc::stat` is musl's and differs per arch -- 128 bytes with
+/// st_mode@16 on aarch64 -- so letting cosmo fill the caller's buffer overran
+/// it by 16 bytes and corrupted the caller's stack: the `stat` inside
+/// `create_dir_all` faulted the next statement in its caller.
+#[repr(C)]
+#[derive(Default)]
+pub struct CosmoStat {
+    dev: u64, ino: u64, nlink: u32, pad0: u32, mode: u32, uid: u32, gid: u32, pad1: u32,
+    rdev: u64, size: i64, blksize: i32, pad2: i32, blocks: i64,
+    atim: [i64; 2], mtim: [i64; 2], ctim: [i64; 2], reserved: [u64; 3],
+}
+
+/// Field by field, so the two layouts' differing offsets fall out of the
+/// compiler instead of being duplicated here as constants.
+pub fn stat_to_caller(dst: &mut libc::stat, src: &CosmoStat) {
+    dst.st_dev = src.dev as _;
+    dst.st_ino = src.ino as _;
+    dst.st_mode = src.mode as _;
+    dst.st_nlink = src.nlink as _;
+    dst.st_uid = src.uid as _;
+    dst.st_gid = src.gid as _;
+    dst.st_rdev = src.rdev as _;
+    dst.st_size = src.size as _;
+    dst.st_blksize = src.blksize as _;
+    dst.st_blocks = src.blocks as _;
+    dst.st_atime = src.atim[0] as _;
+    dst.st_atime_nsec = src.atim[1] as _;
+    dst.st_mtime = src.mtim[0] as _;
+    dst.st_mtime_nsec = src.mtim[1] as _;
+    dst.st_ctime = src.ctim[0] as _;
+    dst.st_ctime_nsec = src.ctim[1] as _;
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_stat(path: *const c_char, buf: *mut libc::stat) -> c_int {
+    let mut c = CosmoStat::default();
+    let r = unsafe { __cosmo_real_stat(path, &mut c as *mut CosmoStat as *mut c_void) };
+    if r == -1 { fix_errno(); return r; }
+    if !buf.is_null() { stat_to_caller(unsafe { &mut *buf }, &c); }
+    r
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_fstat(fd: c_int, buf: *mut libc::stat) -> c_int {
+    let mut c = CosmoStat::default();
+    let r = unsafe { __cosmo_real_fstat(fd, &mut c as *mut CosmoStat as *mut c_void) };
+    if r == -1 { fix_errno(); return r; }
+    if !buf.is_null() { stat_to_caller(unsafe { &mut *buf }, &c); }
+    r
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_lstat(path: *const c_char, buf: *mut libc::stat) -> c_int {
+    let mut c = CosmoStat::default();
+    let r = unsafe { __cosmo_real_lstat(path, &mut c as *mut CosmoStat as *mut c_void) };
+    if r == -1 { fix_errno(); return r; }
+    if !buf.is_null() { stat_to_caller(unsafe { &mut *buf }, &c); }
+    r
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_fcntl(fd: c_int, cmd: c_int, arg: usize) -> c_int {
@@ -351,16 +420,33 @@ pub unsafe extern "C" fn __wrap_poll(fds: *mut PollFd, n: u64, timeout: c_int) -
 
 // ---- signals ---------------------------------------------------------------------
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_sigaction(signum: c_int, act: *const SigAction, old: *mut SigAction) -> c_int {
-    let mut a_copy;
-    let ap = if act.is_null() { act } else {
+pub unsafe extern "C" fn __wrap_sigaction(signum: c_int, act: *const libc::sigaction, old: *mut libc::sigaction) -> c_int {
+    let mut a_copy = CosmoSigAction { handler: 0, flags: 0, pad: 0, restorer: 0, mask: 0 };
+    let ap = if act.is_null() { core::ptr::null() } else {
         let a = unsafe { &*act };
-        a_copy = SigAction { handler: a.handler, flags: gen::sigact().to_host(a.flags as i64) as u64, restorer: a.restorer, mask: a.mask };
-        &mut a_copy as *const SigAction
+        a_copy.handler = a.sa_sigaction as usize;
+        a_copy.flags = gen::sigact().to_host(a.sa_flags as i64) as c_int;
+        // sa_restorer stays 0: std never sets one and cosmo returns from
+        // signals on its own. sa_mask is 128 bytes in the caller's struct and
+        // 8 in cosmo's -- the first 8 are the only ones either can hold.
+        a_copy.mask = unsafe { core::ptr::read_unaligned(&a.sa_mask as *const _ as *const u64) };
+        &a_copy as *const CosmoSigAction
     };
-    let r = unsafe { __cosmo_real_sigaction(sig(signum), ap, old) };
+    let mut old_copy = CosmoSigAction { handler: 0, flags: 0, pad: 0, restorer: 0, mask: 0 };
+    let oldp = if old.is_null() { core::ptr::null_mut() } else { &mut old_copy };
+    let r = unsafe { __cosmo_real_sigaction(sig(signum), ap, oldp) };
     if r == -1 { fix_errno(); return r; }
-    if !old.is_null() { unsafe { (*old).flags = gen::sigact().to_linux((*old).flags as i64) as u64; } }
+    if !old.is_null() {
+        unsafe {
+            // Zero the whole caller's struct first: its sa_mask is 16x wider
+            // than cosmo's, and the fields sit in a different order.
+            let o = &mut *old;
+            core::ptr::write_bytes(o as *mut libc::sigaction as *mut u8, 0, core::mem::size_of::<libc::sigaction>());
+            core::ptr::write_unaligned(&mut o.sa_mask as *mut _ as *mut u64, old_copy.mask);
+            o.sa_sigaction = old_copy.handler as _;
+            o.sa_flags = gen::sigact().to_linux(old_copy.flags as i64) as _;
+        }
+    }
     r
 }
 #[unsafe(no_mangle)]
