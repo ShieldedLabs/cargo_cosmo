@@ -3,7 +3,7 @@
 use crate::cache::{self, Cache, CHANNEL};
 use crate::sha256::Sha256;
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::{self, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process::Command;
 
@@ -69,7 +69,7 @@ pub fn ensure_rust() -> Result<(), String> {
 /// place to ship a gigabyte of GPL toolchain.
 pub fn ensure_cosmocc(cache: &Cache) -> Result<(), String> {
    if cache.bin("apelink").exists() {
-      return Ok(());
+      return patch_tools(&cache.cosmocc);
    }
    fs::create_dir_all(&cache.cosmocc).map_err(|e| format!("{}: {e}", cache.cosmocc.display()))?;
 
@@ -110,6 +110,80 @@ pub fn ensure_cosmocc(cache: &Cache) -> Result<(), String> {
          cache.cosmocc.display()
       ));
    }
+   patch_tools(&cache.cosmocc)
+}
+
+/// Patch two cosmo 4.0.2 runtime bugs out of every cosmocc tool, on Windows.
+/// Between them they made a few compiles in a hundred crash or hang, and long
+/// compiles on a busy machine nearly always. No later cosmocc exists to move to.
+///
+/// dlmalloc merges adjacent mmaps into one segment, and trimming the top of it
+/// munmaps a range that covers several of cosmo's Windows mappings and part of
+/// another. munmap releases the whole ones, fails on the part and returns an
+/// error, which dlmalloc reads as nothing released: it goes on allocating from
+/// freed pages. The next malloc there faults, and gcc's crash handler deadlocks
+/// on the malloc lock, so the compile hangs at zero CPU. `sys_trim` opens with
+/// `cmp $MAX_REQUEST, %rsi; jbe body; xor %eax, %eax; ret`; replacing the `jbe`
+/// with two nops makes it always report nothing released, which dlmalloc
+/// already handles. The tools are short-lived, so keeping freed memory costs
+/// nothing.
+///
+/// `_Exit` unmaps the process's signal word and then calls TerminateProcess,
+/// while the signal worker thread may still write through its pointer to it.
+/// A tool that loses that race dies with an access violation after finishing
+/// its work: gcc exits 0xc0000005, or reports `as` or cc1 "terminated" by
+/// SIGTRAP, the low byte of that status. TerminateProcess unmaps everything
+/// anyway, so the `call *UnmapViewOfFile` becomes a six-byte nop.
+///
+/// Both patches find their own instructions and no longer match once applied,
+/// so a cache patched by an older version picks up whichever it lacks. Unix
+/// has neither bug, so the tools are left alone there.
+fn patch_tools(cosmocc: &Path) -> Result<(), String> {
+   const SYS_TRIM: [u8; 12] = [0x48, 0x81, 0xfe, 0x7f, 0xff, 0xff, 0xff, 0x76, 0x05, 0x31, 0xc0, 0xc3];
+   // `lea -0x118(%rbp), %rax; mov %rax, __sig.process(%rip)`, then the call.
+   const EXIT_SWAP: [u8; 10] = [0x48, 0x8d, 0x85, 0xe8, 0xfe, 0xff, 0xff, 0x48, 0x89, 0x05];
+   const EXIT_NEXT: [u8; 7] = [0x48, 0x8d, 0x8d, 0xf0, 0xfe, 0xff, 0xff];
+   if !cfg!(windows) {
+      return Ok(());
+   }
+   let marker = cosmocc.join(".patched");
+   if marker.exists() {
+      return Ok(());
+   }
+   for path in walk(cosmocc) {
+      if !is_ape(&path) {
+         continue;
+      }
+      let data = fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+      let mut edits: Vec<(usize, &[u8])> = Vec::new();
+      if let Some(at) = data.windows(SYS_TRIM.len()).position(|w| w == SYS_TRIM) {
+         edits.push((at + 7, &[0x90, 0x90]));
+      }
+      let unmap = data.windows(EXIT_SWAP.len()).enumerate().find_map(|(at, w)| {
+         let call = at + EXIT_SWAP.len() + 4;
+         let ok = w == EXIT_SWAP
+            && data.get(call..call + 2) == Some(&[0xff, 0x15])
+            && data.get(call + 6..call + 6 + EXIT_NEXT.len()) == Some(&EXIT_NEXT);
+         ok.then_some(call)
+      });
+      if let Some(at) = unmap {
+         edits.push((at, &[0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00]));
+      }
+      if edits.is_empty() {
+         continue;
+      }
+      // In place, because bin/ holds hard links that must all see the change.
+      let mut f = fs::OpenOptions::new()
+         .write(true)
+         .open(&path)
+         .map_err(|e| format!("{}: {e}", path.display()))?;
+      for (at, bytes) in edits {
+         f.seek(SeekFrom::Start(at as u64))
+            .and_then(|_| f.write_all(bytes))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+      }
+   }
+   File::create(&marker).map_err(|e| format!("{}: {e}", marker.display()))?;
    Ok(())
 }
 
@@ -132,7 +206,8 @@ fn assimilate(cosmocc: &Path) -> Result<(), String> {
    // there, which parses the APE header, and every tool in the chain that
    // spawns another (gcc -> cc1, as, ld) is itself a cosmo program whose execve
    // knows how to launch an APE. The tools stay APEs and run through the shell.
-   if cfg!(target_os = "macos") {
+   // Nor on Windows, where an APE is also a PE and runs as one.
+   if cfg!(target_os = "macos") || cfg!(windows) {
       return Ok(());
    }
    let tool = cosmocc.join("bin").join("assimilate");
@@ -226,6 +301,7 @@ fn unzip(zip: &Path, into: &Path) -> Result<(), String> {
    let f = File::open(zip).map_err(|e| format!("{}: {e}", zip.display()))?;
    let mut ar = zip::ZipArchive::new(f).map_err(|e| format!("{}: {e}", zip.display()))?;
 
+   let mut links = Vec::new();
    for i in 0..ar.len() {
       let mut entry = ar.by_index(i).map_err(|e| format!("zip entry {i}: {e}"))?;
       // enclosed_name rejects paths that escape the destination; a toolchain
@@ -248,14 +324,11 @@ fn unzip(zip: &Path, into: &Path) -> Result<(), String> {
       // them as regular files produces text files holding a path, which exec
       // cannot run. It goes unnoticed because the entries that matter most
       // resolve by another route, so the toolchain half-works.
-      #[cfg(unix)]
       if entry.unix_mode().map(|m| m & 0xf000 == 0xa000).unwrap_or(false) {
          let mut target = String::new();
          std::io::Read::read_to_string(&mut entry, &mut target)
             .map_err(|e| format!("{}: {e}", path.display()))?;
-         let _ = fs::remove_file(&path);
-         std::os::unix::fs::symlink(&target, &path)
-            .map_err(|e| format!("{} -> {target}: {e}", path.display()))?;
+         links.push((path, target));
          continue;
       }
 
@@ -265,15 +338,54 @@ fn unzip(zip: &Path, into: &Path) -> Result<(), String> {
 
       // Every compiler, linker and APE in here needs its executable bit back;
       // zip carries the mode and the extractor has to honour it.
-      #[cfg(unix)]
       if entry.unix_mode().map(|m| m & 0o111 != 0).unwrap_or(false) {
          cache::set_exec(&path)?;
       }
    }
+
+   // Links name links, so they are made in passes until one makes no progress.
+   while !links.is_empty() {
+      let before = links.len();
+      let mut left = Vec::new();
+      for (path, target) in links {
+         if !link(&path, &target)? {
+            left.push((path, target));
+         }
+      }
+      if left.len() == before {
+         let (path, target) = &left[0];
+         return Err(format!("{} -> {target}: the link names nothing in the archive", path.display()));
+      }
+      links = left;
+   }
    Ok(())
 }
 
-fn run(cmd: &mut Command) -> Result<(), String> {
+#[cfg(unix)]
+fn link(path: &Path, target: &str) -> Result<bool, String> {
+   let _ = fs::remove_file(path);
+   std::os::unix::fs::symlink(target, path)
+      .map_err(|e| format!("{} -> {target}: {e}", path.display()))?;
+   Ok(true)
+}
+
+/// Windows makes creating a symlink a privilege, so the link becomes a hard link
+/// to the file it names, or a copy of it. False while that file is itself a link
+/// still to be made.
+#[cfg(not(unix))]
+fn link(path: &Path, target: &str) -> Result<bool, String> {
+   let src = path.parent().unwrap_or(Path::new("")).join(target);
+   if !src.is_file() {
+      return Ok(false);
+   }
+   let _ = fs::remove_file(path);
+   fs::hard_link(&src, path)
+      .or_else(|_| fs::copy(&src, path).map(|_| ()))
+      .map_err(|e| format!("{} -> {}: {e}", path.display(), src.display()))?;
+   Ok(true)
+}
+
+pub(crate) fn run(cmd: &mut Command) -> Result<(), String> {
    let out = cmd.output().map_err(|e| format!("{:?}: {e}", cmd.get_program()))?;
    if out.status.success() {
       return Ok(());

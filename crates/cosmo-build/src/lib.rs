@@ -19,7 +19,7 @@
 //! # undefined __wrap_* references. cfg(cosmo) is set only by this crate, so
 //! # ordinary builds neither resolve nor compile it.
 //! [target.'cfg(cosmo)'.dependencies]
-//! cosmo-compat = "5"
+//! cosmo-compat = "6"
 //!
 //! [lints.rust]
 //! unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -51,11 +51,14 @@
 //!
 //! # What it needs
 //!
-//! Nothing installed up front beyond `rustup` and a shell. The first build
-//! installs the pinned nightly (with `rust-src`) and downloads cosmocc
+//! Nothing installed up front beyond `rustup`, and on Unix a shell. The first
+//! build installs the pinned nightly (with `rust-src`) and downloads cosmocc
 //! (~440MB, ~1.4GB unpacked) into a cache shared by every project, so a second
-//! project costs no disk. `/bin/sh` is required because cosmocc's own tools are
-//! APEs and cannot be `exec`'d any other way.
+//! project costs no disk. On Unix `/bin/sh` is required because cosmocc's own
+//! tools are APEs, which a Unix kernel cannot `exec`; Windows runs them as the
+//! PE files they also are. cosmocc's own drivers are shell scripts, so this
+//! crate brings its own (assets/shim.rs), compiled with the host's rustc on
+//! first use, and points cc-rs at it for any C or C++ in the dependency graph.
 //!
 //! # What gets downloaded
 //!
@@ -80,6 +83,7 @@
 //! | `COSMO_APE=0` | never build an APE -- the setting for an editor |
 //! | `COSMO_APE=1` | build one even when the heuristics say otherwise |
 //! | `COSMO_RUSTFLAGS` | extra rustflags for the cosmo builds only |
+//! | `COSMO_CFLAGS`, `COSMO_CXXFLAGS` | extra flags for C or C++ in the cosmo builds, never for assembly |
 //! | `COSMO_KEEP_PROFILE=1` | do not override `codegen-units`/`lto` |
 //!
 //! # Caveats
@@ -117,7 +121,8 @@ mod toolchain;
 /// anything anyway.
 ///
 /// `cargo test` is byte-identical to `cargo build` here and cannot be
-/// distinguished; set `COSMO_APE=0` if that matters.
+/// distinguished; set `COSMO_APE=0` if that matters. On Windows `cargo check` is
+/// too: the search path goes in `PATH`, which starts at `deps` either way.
 pub fn is_metadata_only() -> bool {
    if env::var_os("CLIPPY_ARGS").is_some() {
       return true;
@@ -241,23 +246,29 @@ pub fn try_build_ape(args: &[&str]) -> Result<Vec<PathBuf>, String> {
 
 #[cfg(test)]
 mod tests {
-   /// The wrap list is inlined into the linker shim at asset-generation time,
-   /// and the translators it names live in cosmo-compat. A symbol wrapped here
-   /// with no translator there is a link error in every consuming project, so
-   /// the two must be published in lockstep. Only runs from a repo checkout;
-   /// the sibling crate is not in the published package.
+   /// The linker driver wraps every symbol in assets/wrap.txt, and the
+   /// translators it names live in cosmo-compat. A symbol wrapped here with no
+   /// translator there is a link error in every consuming project, so the two
+   /// lists must be published in lockstep. Only runs from a repo checkout; the
+   /// sibling crate is not in the published package.
    #[test]
    fn wrap_list_matches_cosmo_compat() {
-      let Ok(list) = std::fs::read_to_string("../cosmo-compat/wrap.txt") else {
+      let Ok(theirs) = std::fs::read_to_string("../cosmo-compat/wrap.txt") else {
          return;
       };
-      let ld = include_str!("../assets/cosmo-ld.sh");
-      for sym in list.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')) {
-         assert!(
-            ld.contains(&format!("--wrap={}", sym.trim())),
-            "cosmo-compat wraps {sym:?} but the embedded linker shim does not; \
-             regenerate crates/cosmo-build/assets"
-         );
-      }
+      let symbols = |text: &str| -> Vec<String> {
+         let mut v: Vec<String> = text
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect();
+         v.sort();
+         v
+      };
+      assert_eq!(
+         symbols(crate::cache::WRAP_LIST),
+         symbols(&theirs),
+         "assets/wrap.txt and cosmo-compat's wrap.txt disagree; regenerate crates/cosmo-build/assets"
+      );
    }
 }

@@ -1,6 +1,6 @@
 //! The build itself: cargo once per architecture, then apelink.
 
-use crate::cache::{Cache, CHANNEL};
+use crate::cache::{Cache, Glue, CHANNEL};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -15,11 +15,11 @@ pub fn build(
    release: bool,
    args: &[&str],
 ) -> Result<Vec<PathBuf>, String> {
-   let specs = cache.materialize()?;
+   let glue = cache.materialize()?;
 
    let mut per_arch = Vec::new();
-   for (arch, spec) in ARCHES.iter().zip(specs.iter()) {
-      per_arch.push(cargo(arch, spec, manifest_dir, release, args)?);
+   for (arch, spec) in ARCHES.iter().zip(glue.specs.iter()) {
+      per_arch.push(cargo(arch, spec, &glue, manifest_dir, release, args)?);
    }
 
    // Only fuse binaries that exist on both sides; an example built for one
@@ -53,6 +53,7 @@ pub fn build(
 fn cargo(
    arch: &str,
    spec: &Path,
+   glue: &Glue,
    manifest_dir: &Path,
    release: bool,
    args: &[&str],
@@ -99,6 +100,16 @@ fn cargo(
    cmd.current_dir(manifest_dir);
    scrub(&mut cmd);
 
+   // With the outer jobserver scrubbed, the inner cargo would run a job per
+   // core, and cc-rs as many compilers per C++ crate; rocksdb alone then takes
+   // several GB. The outer -j comes through as NUM_JOBS. A --jobs in `args`
+   // still wins over the env var.
+   if std::env::var_os("CARGO_BUILD_JOBS").is_none() {
+      if let Ok(jobs) = std::env::var("NUM_JOBS") {
+         cmd.env("CARGO_BUILD_JOBS", jobs);
+      }
+   }
+
    // cfg(cosmo) lets a crate pick a cosmo-specific code path, and gates the
    // cosmo-compat dependency. Appended to, not replacing, any RUSTFLAGS set.
    let flags = std::env::var("COSMO_RUSTFLAGS").unwrap_or_default();
@@ -107,6 +118,17 @@ fn cargo(
    // The outer cargo holds an exclusive lock on its target dir; a nested cargo
    // against the same one blocks on it until killed.
    cmd.env("CARGO_TARGET_DIR", manifest_dir.join("target").join("cosmo-inner"));
+
+   // C and C++ dependencies are built by cc-rs, which picks its tools by target
+   // triple, and nothing on the host answers to `*-unknown-cosmo`. A caller who
+   // set one of these meant it.
+   for (var, tool) in [("CC", "cc"), ("CXX", "c++"), ("AR", "ar")] {
+      let triple = format!("{arch}-unknown-cosmo");
+      let keys = [format!("{var}_{triple}"), format!("{var}_{}", triple.replace('-', "_"))];
+      if keys.iter().all(|k| std::env::var_os(k).is_none()) {
+         cmd.env(&keys[0], glue.tool(&format!("{triple}-{tool}")));
+      }
+   }
 
    // This build runs the package's build script again. Without the flag,
    // apeify would start another pair of builds, forever.
@@ -203,11 +225,15 @@ fn apelink(
 
 /// Build a command that can actually exec an APE.
 ///
-/// The kernel cannot exec one directly -- no ELF magic up front and no shebang
-/// -- which is fine from a shell, because the APE header is also valid /bin/sh,
-/// but spawning it as a program fails with ENOEXEC. Going through sh is what
-/// the format expects. Native ELF files are run directly.
+/// A Unix kernel cannot exec one directly -- no ELF magic up front and no
+/// shebang -- which is fine from a shell, because the APE header is also valid
+/// /bin/sh, but spawning it as a program fails with ENOEXEC. Going through sh is
+/// what the format expects. Native ELF files are run directly, and so is every
+/// APE on Windows, where it is also a PE.
 pub fn ape(path: &Path) -> Command {
+   if cfg!(windows) {
+      return Command::new(path);
+   }
    let elf = fs::read(path)
       .map(|b| b.starts_with(b"\x7fELF"))
       .unwrap_or(false);

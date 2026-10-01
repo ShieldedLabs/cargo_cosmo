@@ -1,15 +1,24 @@
 //! Where the toolchain and the generated glue live, and how they get there.
 
+use crate::driver::{ape, ARCHES};
+use crate::sha256::Sha256;
+use crate::toolchain::run;
+use std::env::consts::EXE_SUFFIX;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
-/// Target specs, the linker shim and the wrap list are generated rather than
+/// Target specs and the compiler and linker drivers are generated rather than
 /// shipped ready-to-use: the spec has to name an absolute path to the linker,
-/// and the linker has to name an absolute path to the toolchain. Both are
+/// and the drivers have to name an absolute path to the toolchain. Both are
 /// known only once the cache location is.
 const SPEC_X86: &str = include_str!("../assets/x86_64-unknown-cosmo.json");
 const SPEC_ARM: &str = include_str!("../assets/aarch64-unknown-cosmo.json");
-const COSMO_LD: &str = include_str!("../assets/cosmo-ld.sh");
+const SHIM: &str = include_str!("../assets/shim.rs");
+
+/// The libc symbols cosmo-compat translates. The linker driver adds a --wrap for
+/// each, and the copy of libcosmo it links has each one renamed.
+pub const WRAP_LIST: &str = include_str!("../assets/wrap.txt");
 
 /// The nightly these specs were generated against. Custom target JSON is
 /// schema-checked strictly and the schema drifts between nightlies, so the
@@ -21,6 +30,20 @@ pub struct Cache {
    pub root: PathBuf,
    pub cosmocc: PathBuf,
    pub gen: PathBuf,
+}
+
+/// What [`Cache::materialize`] produced for one build.
+pub struct Glue {
+   /// One target spec per entry of [`ARCHES`], in the same order.
+   pub specs: [PathBuf; 2],
+   /// The directory holding the compiler and linker drivers.
+   pub tools: PathBuf,
+}
+
+impl Glue {
+   pub fn tool(&self, name: &str) -> PathBuf {
+      self.tools.join(format!("{name}{EXE_SUFFIX}"))
+   }
 }
 
 impl Cache {
@@ -44,52 +67,178 @@ impl Cache {
       self.cosmocc.join("bin").join(name)
    }
 
-   /// Write the linker shim and both target specs, then hand back the spec
-   /// paths. Cheap enough to redo on every build, which also repairs a cache
-   /// someone has moved or half-deleted.
-   pub fn materialize(&self) -> Result<[PathBuf; 2], String> {
+   /// Build the drivers and the renamed libcosmo if they are missing, write
+   /// both target specs, and hand back where it all is. Cheap when everything
+   /// is already there, which also repairs a cache someone has moved or
+   /// half-deleted.
+   pub fn materialize(&self) -> Result<Glue, String> {
       fs::create_dir_all(&self.gen).map_err(|e| format!("{}: {e}", self.gen.display()))?;
+
+      let wraps: Vec<&str> = WRAP_LIST
+         .lines()
+         .map(str::trim)
+         .filter(|l| !l.is_empty() && !l.starts_with('#'))
+         .collect();
+      let libcosmo = self.unwrapped_libcosmo(&wraps)?;
+      let tools = self.drivers(&wraps, &libcosmo)?;
+      let glue = Glue { specs: [PathBuf::new(), PathBuf::new()], tools };
 
       let mut specs = Vec::new();
       for (arch, spec) in [("x86_64", SPEC_X86), ("aarch64", SPEC_ARM)] {
-         // One shim per arch: cosmo-ld reads the architecture out of its own
-         // name, exactly as the shell version in tools/ does.
-         let ld = self.gen.join(format!("cosmo-ld-{arch}"));
-         write_exec(&ld, &COSMO_LD.replace("@COSMOCC@", &shell_quote(&self.cosmocc)))?;
-
+         let ld = glue.tool(&format!("cosmo-ld-{arch}"));
          let path = self.gen.join(format!("{arch}-unknown-cosmo.json"));
          let text = spec.replace("@COSMO_LD@", &escape_json(&ld.to_string_lossy()));
-         fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+         // Rewritten only when it changed: a concurrent build may be reading it.
+         if fs::read_to_string(&path).ok().as_deref() != Some(text.as_str()) {
+            fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+         }
          specs.push(path);
       }
-      Ok([specs.remove(0), specs.remove(0)])
+      Ok(Glue { specs: [specs.remove(0), specs.remove(0)], ..glue })
    }
 
+   /// A copy of each architecture's libcosmo in which every wrapped symbol NAME
+   /// is renamed to `__cosmo_real_NAME`, definition and internal references
+   /// alike; cosmo-compat calls the real function by that name. `--wrap`
+   /// redirects undefined references from every object in the link, libcosmo's
+   /// own included, so with the stock archive cosmo's own calls to itself would
+   /// go through the translators too. Keyed by the wrap list, since the objcopy
+   /// pass over the whole archive is not free: over a minute per architecture
+   /// on Windows.
+   fn unwrapped_libcosmo(&self, wraps: &[&str]) -> Result<PathBuf, String> {
+      let dir = self.gen.join(format!("libcosmo-{}", short_hash(&[&wraps.join(" ")])));
+      if wraps.is_empty() {
+         return Ok(dir);
+      }
+      for arch in ARCHES {
+         let out = dir.join(format!("{arch}.a"));
+         if out.is_file() {
+            continue;
+         }
+         fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+
+         // Concurrent builds each write their own temp file; the rename is atomic.
+         let pid = std::process::id();
+         let syms = dir.join(format!("{arch}.syms.{pid}"));
+         let tmp = dir.join(format!("{arch}.a.{pid}"));
+         let text: String = wraps.iter().map(|s| format!("{s} __cosmo_real_{s}\n")).collect();
+         fs::write(&syms, text).map_err(|e| format!("{}: {e}", syms.display()))?;
+         let lib = self.cosmocc.join(format!("{arch}-linux-cosmo")).join("lib").join("libcosmo.a");
+         let r = run(
+            ape(&self.bin(&format!("{arch}-linux-cosmo-objcopy")))
+               .arg(format!("--redefine-syms={}", syms.display()))
+               .arg(&lib)
+               .arg(&tmp),
+         );
+         let _ = fs::remove_file(&syms);
+         r?;
+         settle(&tmp, &out)?;
+      }
+      Ok(dir)
+   }
+
+   /// Compile assets/shim.rs with the host's rustc and link it under every name
+   /// it answers to. The directory is keyed by everything baked into the
+   /// program, so a changed source or a moved cache gets a fresh one rather
+   /// than a stale one, and an unchanged one is never rebuilt -- which matters
+   /// on Windows, where a program that a concurrent build is running cannot be
+   /// replaced.
+   fn drivers(&self, wraps: &[&str], libcosmo: &Path) -> Result<PathBuf, String> {
+      let cosmocc = self.cosmocc.to_string_lossy();
+      let libcosmo = libcosmo.to_string_lossy();
+      let wraps = wraps.join(" ");
+      let key = short_hash(&[SHIM, &cosmocc, &libcosmo, &wraps]);
+      let dir = self.gen.join(format!("tools-{key}"));
+      if dir.is_dir() {
+         return Ok(dir);
+      }
+
+      // Built beside its final place and renamed into it whole, so a build that
+      // dies half way never leaves a directory that looks finished.
+      let tmp = self.gen.join(format!("tools-{key}.{}", std::process::id()));
+      let _ = fs::remove_dir_all(&tmp);
+      fs::create_dir_all(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
+      let src = tmp.join("cosmo-shim.rs");
+      fs::write(&src, SHIM).map_err(|e| format!("{}: {e}", src.display()))?;
+
+      // cargo hands every build script the rustc it is building with.
+      let exe = tmp.join(format!("cosmo-shim{EXE_SUFFIX}"));
+      let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+      run(Command::new(rustc)
+         .args(["--edition", "2021", "-O", "--crate-name", "cosmo_shim", "-o"])
+         .arg(&exe)
+         .arg(&src)
+         .env("COSMO_SHIM_COSMOCC", &*cosmocc)
+         .env("COSMO_SHIM_LIBCOSMO", &*libcosmo)
+         .env("COSMO_SHIM_WRAPS", &wraps))?;
+
+      for arch in ARCHES {
+         for name in [
+            format!("cosmo-ld-{arch}"),
+            format!("{arch}-unknown-cosmo-cc"),
+            format!("{arch}-unknown-cosmo-c++"),
+            format!("{arch}-unknown-cosmo-ar"),
+         ] {
+            let link = tmp.join(format!("{name}{EXE_SUFFIX}"));
+            fs::hard_link(&exe, &link)
+               .or_else(|_| fs::copy(&exe, &link).map(|_| ()))
+               .map_err(|e| format!("{}: {e}", link.display()))?;
+         }
+      }
+
+      match fs::rename(&tmp, &dir) {
+         Ok(()) => Ok(dir),
+         // Another build got there first with the same key, so the same contents.
+         Err(_) if dir.is_dir() => {
+            let _ = fs::remove_dir_all(&tmp);
+            Ok(dir)
+         }
+         Err(e) => Err(format!("{} -> {}: {e}", tmp.display(), dir.display())),
+      }
+   }
+}
+
+/// Move a finished temp file into place. Losing a race to an identical file is
+/// success: on Windows the rename fails when a concurrent link has it open.
+fn settle(tmp: &Path, out: &Path) -> Result<(), String> {
+   match fs::rename(tmp, out) {
+      Ok(()) => Ok(()),
+      Err(_) if out.is_file() => {
+         let _ = fs::remove_file(tmp);
+         Ok(())
+      }
+      Err(e) => Err(format!("{} -> {}: {e}", tmp.display(), out.display())),
+   }
+}
+
+fn short_hash(parts: &[&str]) -> String {
+   let mut h = Sha256::new();
+   for p in parts {
+      h.update(p.as_bytes());
+      h.update(&[0]);
+   }
+   h.finalize()[..8].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn base_cache_dir() -> Result<PathBuf, String> {
    if let Some(d) = std::env::var_os("XDG_CACHE_HOME") {
       return Ok(PathBuf::from(d));
    }
+   // Windows has no XDG convention and often no HOME; its per-user cache root is
+   // LOCALAPPDATA.
+   if cfg!(windows) {
+      if let Some(d) = std::env::var_os("LOCALAPPDATA") {
+         return Ok(PathBuf::from(d));
+      }
+   }
    match std::env::var_os("HOME") {
       Some(h) => Ok(PathBuf::from(h).join(".cache")),
-      None => Err("neither COSMO_HOME, XDG_CACHE_HOME nor HOME is set".into()),
+      None => Err("none of COSMO_HOME, XDG_CACHE_HOME, LOCALAPPDATA or HOME is set".into()),
    }
-}
-
-/// Single-quote a path for the shell: the cache can sit under a home directory
-/// with a space in it, and the shim assigns this to a variable unquoted.
-fn shell_quote(p: &Path) -> String {
-   format!("'{}'", p.to_string_lossy().replace('\'', r"'\''"))
 }
 
 fn escape_json(s: &str) -> String {
    s.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-pub fn write_exec(path: &Path, text: &str) -> Result<(), String> {
-   fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
-   set_exec(path)
 }
 
 pub fn set_exec(path: &Path) -> Result<(), String> {

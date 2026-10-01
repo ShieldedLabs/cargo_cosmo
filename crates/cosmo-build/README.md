@@ -63,11 +63,17 @@ arguments directly and the manifest table is not consulted.
 
 ## What it needs
 
-`rustup` and `/bin/sh`. Nothing else, and nothing installed up front — the first
-build installs the pinned nightly with `rust-src` and downloads cosmocc (~440MB,
-~1.4GB unpacked) into a cache shared by every project, so a second project costs
-no disk. `/bin/sh` is unavoidable: cosmocc's own tools are APEs and the kernel
-cannot `exec` one directly.
+`rustup`, and on Unix `/bin/sh`. Nothing else, and nothing installed up front —
+the first build installs the pinned nightly with `rust-src` and downloads cosmocc
+(~440MB, ~1.4GB unpacked) into a cache shared by every project, so a second
+project costs no disk. Linux, macOS and Windows hosts all work. `/bin/sh` is
+unavoidable on Unix: cosmocc's own tools are APEs and the kernel cannot `exec`
+one directly. Windows runs them as the PE files they also are.
+
+cosmocc's compiler and linker drivers are shell scripts, so this crate ships its
+own as Rust (`assets/shim.rs`), compiles it with the host's rustc on first use,
+and points cc-rs at it (`CC_<arch>-unknown-cosmo` and friends) for any C or C++
+in the dependency graph.
 
 ## What gets downloaded
 
@@ -100,6 +106,7 @@ bytes. A mismatch deletes the download and fails the build.
 | `COSMO_COSMOCC_URL` | fetch cosmocc from a mirror |
 | `COSMO_COSMOCC_SHA256` | expect a different cosmocc |
 | `COSMO_RUSTFLAGS` | extra rustflags for the cosmo builds only |
+| `COSMO_CFLAGS`, `COSMO_CXXFLAGS` | extra flags for C or C++ in the cosmo builds, never for assembly |
 | `COSMO_KEEP_PROFILE=1` | do not override `codegen-units`/`lto` |
 
 ## Caveats
@@ -108,9 +115,9 @@ bytes. A mismatch deletes the download and fails the build.
   until it fails**.
 * The nested build needs its own target directory (~190MB) because the outer
   cargo holds an exclusive lock on `target/`.
-* `cargo check` and `cargo clippy` are detected and skipped; `cargo test` is
-  indistinguishable from `cargo build` in a build script's environment and will
-  build an APE. Set `COSMO_APE=0` where that matters.
+* `cargo check` and `cargo clippy` are detected and skipped, except `cargo check`
+  on Windows; `cargo test` is indistinguishable from `cargo build` in a build
+  script's environment and will build an APE. Set `COSMO_APE=0` where that matters.
 * The APE is a genuine fat binary but **runs on Linux today** — rustc bakes in
   Linux's OS constants while cosmopolitan resolves them at load time. The
   `cosmo-compat` shim translates 123 libc entry points at the boundary, and
