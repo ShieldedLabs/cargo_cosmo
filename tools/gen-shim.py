@@ -60,11 +60,11 @@ GROUPS = {
 # Not wrapped: pidfd_spawnp/pidfd_getpid -- std imports them WEAK (null when
 # absent, which cosmo lacks); a wrapper's __cosmo_real_ reference would be strong.
 PASSTHROUGH = {
-   "int": """accept4 bind chdir chmod chown chroot close closedir connect
+   "int": """bind chdir chmod chown chroot close closedir connect
       copy_file_range dirfd dup dup2 execvp fchmod fchown fdatasync flock fork
       fstat fsync ftruncate futimens gethostname getpeername getrandom
       getsockname lchown listen lseek lstat mkdir mkfifo munmap pause
-      pipe2 pread preadv pwrite pwritev read readlink
+      pread preadv pwrite pwritev read readlink
       readv rename rmdir sched_getaffinity sendfile setgid setgroups setpgid
       setsid setuid splice stat symlink sysconf syscall unlink write writev
       shutdown mprotect sigaltstack""".split(),
@@ -79,8 +79,8 @@ PASSTHROUGH = {
       pthread_getattr_np pthread_join pthread_key_create pthread_key_delete
       pthread_setname_np pthread_setspecific""".split(),
 }
-HAND = """open openat fcntl ioctl socket socketpair setsockopt getsockopt send
-   sendto recv recvfrom sendmsg recvmsg poll mmap sigaction signal kill killpg
+HAND = """open openat fcntl ioctl socket socketpair accept4 setsockopt getsockopt send
+   sendto recv recvfrom sendmsg recvmsg poll mmap pipe2 sigaction signal kill killpg
    sigaddset waitpid unlinkat linkat renameat fchmodat utimensat getaddrinfo
    freeaddrinfo clock_gettime clock_nanosleep""".split()
 

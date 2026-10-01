@@ -109,6 +109,8 @@ check "threads"   "$out" "thread sum 1..10 = 55"
 check "file io"   "$out" "file  = file io works"
 check "unwinding" "$out" "catch_unwind caught = true"
 check "io::Error formatting (strerror_r shim)" "$out" "ioerr = No such file or directory"
+check "pipe2 with Linux O_* flags" "$out" "pipe2 = works"
+check "accept4 through std's accept" "$out" "accept = works"
 
 # ------------------------------------------------------------------ fat-ness
 banner "fat binary carries both architectures"

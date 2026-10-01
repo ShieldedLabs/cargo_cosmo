@@ -32,6 +32,8 @@ unsafe extern "C" {
     fn __cosmo_real_ioctl(fd: c_int, req: u64, ...) -> c_int;
     fn __cosmo_real_socket(domain: c_int, ty: c_int, proto: c_int) -> c_int;
     fn __cosmo_real_socketpair(domain: c_int, ty: c_int, proto: c_int, sv: *mut c_int) -> c_int;
+    fn __cosmo_real_accept4(fd: c_int, addr: *mut c_void, alen: *mut u32, flags: c_int) -> c_int;
+    fn __cosmo_real_pipe2(fds: *mut c_int, flags: c_int) -> c_int;
     fn __cosmo_real_setsockopt(fd: c_int, level: c_int, name: c_int, val: *const c_void, len: u32) -> c_int;
     fn __cosmo_real_getsockopt(fd: c_int, level: c_int, name: c_int, val: *mut c_void, len: *mut u32) -> c_int;
     fn __cosmo_real_send(fd: c_int, buf: *const c_void, n: usize, flags: c_int) -> isize;
@@ -169,6 +171,16 @@ pub unsafe extern "C" fn __wrap_mmap(addr: *mut c_void, len: u64, prot: c_int, f
     r
 }
 
+// ---- pipes -----------------------------------------------------------------------
+/// pipe2's flags are O_* bits, so open_flags is the whole translation. Generated as
+/// an errno-only passthrough it handed cosmopolitan Linux's `O_CLOEXEC|O_NONBLOCK`
+/// (0x80800), which its pipe2 rejects with EINVAL -- mio's wakeup pipe, and with it
+/// every tokio runtime, died at startup on a Mac.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_pipe2(fds: *mut c_int, flags: c_int) -> c_int {
+    ret(unsafe { __cosmo_real_pipe2(fds, open_flags(flags)) })
+}
+
 // ---- sockets ---------------------------------------------------------------------
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_socket(domain: c_int, ty: c_int, proto: c_int) -> c_int {
@@ -186,6 +198,15 @@ pub unsafe extern "C" fn __wrap_socketpair(domain: c_int, ty: c_int, proto: c_in
         return unsafe { crate::socketpair::tcp_socketpair(ty, sv) };
     }
     ret(unsafe { __cosmo_real_socketpair(gen::af().to_host(domain as i64) as c_int, gen::sock().to_host(ty as i64) as c_int, proto, sv) })
+}
+/// accept4's flags are SOCK_* bits (`SOCK_CLOEXEC|SOCK_NONBLOCK` from std's accept),
+/// translated like socket()'s type. Untranslated they are an unknown-bit EINVAL on
+/// XNU, and the server side of every socket would refuse to accept.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_accept4(fd: c_int, addr: *mut c_void, alen: *mut u32, flags: c_int) -> c_int {
+    let r = ret(unsafe { __cosmo_real_accept4(fd, addr, alen, gen::sock().to_host(flags as i64) as c_int) });
+    if r >= 0 { unsafe { family_to_linux(addr as *mut u16); } }
+    r
 }
 /// (level, name) in host numbering. Levels: SOL_SOCKET is in the `so` group;
 /// IPPROTO_* are the same everywhere. Option names are per level.

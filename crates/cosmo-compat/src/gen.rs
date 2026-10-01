@@ -1238,13 +1238,6 @@ pub fn rlimit() -> Group {
 // floats, no structs by value), which the SysV and AAPCS conventions pass in the
 // first six/eight integer registers regardless of declared type; an untyped
 // six-register signature therefore forwards any of them unchanged.
-unsafe extern "C" { fn __cosmo_real_accept4(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_accept4(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_accept4(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
 unsafe extern "C" { fn __cosmo_real_bind(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_bind(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
@@ -1480,13 +1473,6 @@ unsafe extern "C" { fn __cosmo_real_pause(a: usize, b: usize, c: usize, d: usize
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_pause(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
     let r = unsafe { __cosmo_real_pause(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
-unsafe extern "C" { fn __cosmo_real_pipe2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_pipe2(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_pipe2(a, b, c, d, e, f) };
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }

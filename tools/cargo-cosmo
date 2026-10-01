@@ -104,6 +104,14 @@ def check_toolchain(arch):
    with open(cc, "rb") as f:
       magic = f.read(4)
    if magic == b"MZqF":
+      # macOS is the exception this check exists to make: assimilate there can
+      # only produce x86-64 Mach-O, so on Apple silicon it converts nothing and
+      # is not wanted. It is not needed either -- every tool that spawns another
+      # (gcc -> cc1, as, ld) is itself a cosmo program whose execve launches
+      # APEs. Same reasoning as cosmo-build's toolchain.rs.
+      import platform
+      if platform.system() == "Darwin":
+         return
       die(f"{cc} is still an APE, so gcc will not be able to spawn its own ld.\n"
           f"       Run: {os.path.join(REPO, 'tools', 'assimilate-toolchain.sh')}\n"
           f"       (or register APE with binfmt_misc)")
