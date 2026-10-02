@@ -49,6 +49,7 @@ unsafe extern "C" {
     fn __cosmo_real_recvfrom(fd: c_int, buf: *mut c_void, n: usize, flags: c_int, addr: *mut c_void, alen: *mut u32) -> isize;
     fn __cosmo_real_sendmsg(fd: c_int, msg: *const MsgHdr, flags: c_int) -> isize;
     fn __cosmo_real_recvmsg(fd: c_int, msg: *mut MsgHdr, flags: c_int) -> isize;
+    fn __cosmo_real_pthread_setschedparam(thread: usize, policy: c_int, param: *const c_void) -> c_int;
     fn __cosmo_real_poll(fds: *mut PollFd, n: u64, timeout: c_int) -> c_int;
     fn __cosmo_real_mmap(addr: *mut c_void, len: u64, prot: c_int, flags: c_int, fd: c_int, off: i64) -> *mut c_void;
     fn __cosmo_real_sigaction(sig: c_int, act: *const CosmoSigAction, old: *mut CosmoSigAction) -> c_int;
@@ -383,6 +384,23 @@ pub unsafe extern "C" fn __wrap_recvmsg(fd: c_int, msg: *mut MsgHdr, flags: c_in
         }
     }
     r
+}
+/// `pthread_*` functions return an errno code directly rather than -1. The
+/// Linux-ABI caller (the thread-priority crate) requests SCHED_OTHER with
+/// static priority 0 before lowering the nice value through setpriority().
+/// XNU has no SCHED_OTHER constant (its policy numbering differs entirely), so
+/// cosmo's pthread_setschedparam rejects the call and the caller keeps the
+/// thread at default priority -- which is how the miner's solver ended up
+/// competing with the GUI at full scheduler priority. Honour the default-policy
+/// request as success and let the following setpriority() do the real work.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_pthread_setschedparam(thread: usize, policy: c_int, param: *const c_void) -> c_int {
+    let _ = thread;
+    if policy == 0 { // Linux SCHED_OTHER: default scheduling
+        let prio = if param.is_null() { 0 } else { unsafe { *(param as *const i32) } };
+        return if prio == 0 { 0 } else { 22 /* EINVAL, as Linux for a nonzero static priority */ };
+    }
+    95 // ENOTSUP: Linux realtime policies have no XNU equivalent on this path
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getaddrinfo(node: *const c_char, service: *const c_char, hints: *const AddrInfo, res: *mut *mut AddrInfo) -> c_int {

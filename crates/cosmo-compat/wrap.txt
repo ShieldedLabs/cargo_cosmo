@@ -79,6 +79,7 @@ pthread_join
 pthread_key_create
 pthread_key_delete
 pthread_setname_np
+pthread_setschedparam
 pthread_setspecific
 pwrite
 pwritev

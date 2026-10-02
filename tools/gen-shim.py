@@ -82,6 +82,7 @@ PASSTHROUGH = {
 HAND = """open openat fcntl ioctl socket socketpair accept4 setsockopt getsockopt send
    sendto recv recvfrom sendmsg recvmsg poll mmap pipe2 sigaction signal kill killpg
    sigaddset waitpid unlinkat linkat renameat rename fchmodat utimensat getaddrinfo
+   pthread_setschedparam
    freeaddrinfo clock_gettime clock_nanosleep stat fstat lstat
    bind connect getsockname getpeername""".split()
 
