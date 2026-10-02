@@ -2,8 +2,9 @@
 
 use crate::cache::{Cache, Glue, CHANNEL};
 use std::fs;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 pub const ARCHES: [&str; 2] = ["x86_64", "aarch64"];
 
@@ -134,19 +135,39 @@ fn cargo(
    // apeify would start another pair of builds, forever.
    cmd.env("COSMO_APE_INNER", "1");
 
-   let out = cmd.output().map_err(|e| format!("cargo: {e}"))?;
-   if !out.status.success() {
-      return Err(format!(
-         "{arch} build failed:\n{}",
-         String::from_utf8_lossy(&out.stderr)
-      ));
+   // stderr carries cargo's human progress, shown live; stdout the JSON stream.
+   cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+   let mut child = cmd.spawn().map_err(|e| format!("cargo: {e}"))?;
+   let err = child.stderr.take().unwrap();
+   let prefix = format!("[cosmo {arch}] ");
+   let echo = std::thread::spawn(move || {
+      let mut sink = progress();
+      let mut all = Vec::new();
+      for line in BufReader::new(err).split(b'\n').map_while(Result::ok) {
+         if let Some(f) = sink.as_mut() {
+            let mut l = prefix.clone().into_bytes();
+            l.extend_from_slice(&line);
+            l.push(b'\n');
+            let _ = f.write_all(&l);
+         }
+         all.extend_from_slice(&line);
+         all.push(b'\n');
+      }
+      all
+   });
+   let mut stdout = Vec::new();
+   let _ = child.stdout.take().unwrap().read_to_end(&mut stdout);
+   let status = child.wait().map_err(|e| format!("cargo: {e}"))?;
+   let stderr = echo.join().unwrap_or_default();
+   if !status.success() {
+      return Err(format!("{arch} build failed:\n{}", String::from_utf8_lossy(&stderr)));
    }
 
    // The artifact stream is scanned for executables rather than parsed: one
    // field is wanted out of a message format that changes shape regularly, and
    // the binary's name is its file stem, so no JSON parser earns its keep here.
    let mut found = Vec::new();
-   for line in String::from_utf8_lossy(&out.stdout).lines() {
+   for line in String::from_utf8_lossy(&stdout).lines() {
       let Some(exe) = json_string_field(line, "\"executable\":") else {
          continue;
       };
@@ -157,6 +178,18 @@ fn cargo(
       found.push((name, path));
    }
    Ok(found)
+}
+
+/// Where the inner builds' progress goes. Cargo holds everything a build script
+/// prints until the script exits, so these lines go around it: to the file
+/// `COSMO_PROGRESS` names, for a wrapper that shows it, or else straight to the
+/// terminal when there is one.
+fn progress() -> Option<fs::File> {
+   if let Some(path) = std::env::var_os("COSMO_PROGRESS") {
+      return fs::OpenOptions::new().create(true).append(true).open(path).ok();
+   }
+   let tty = if cfg!(windows) { "CONOUT$" } else { "/dev/tty" };
+   fs::OpenOptions::new().read(true).write(true).open(tty).ok()
 }
 
 /// Pull one `"key":"value"` out of a JSON line. Returns None for `null`.
@@ -188,6 +221,9 @@ fn apelink(
 ) -> Result<PathBuf, String> {
    let out = outdir.join(format!("{name}.com"));
    let bin = |n: &str| cache.bin(n);
+   if let Some(mut f) = progress() {
+      let _ = writeln!(f, "[cosmo] apelink {}", out.display());
+   }
 
    let mut cmd = ape(&bin("apelink"));
    cmd.arg("-V").arg("-1"); // support every OS cosmo knows

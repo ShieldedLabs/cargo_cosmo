@@ -108,11 +108,13 @@ bytes. A mismatch deletes the download and fails the build.
 | `COSMO_RUSTFLAGS` | extra rustflags for the cosmo builds only |
 | `COSMO_CFLAGS`, `COSMO_CXXFLAGS` | extra flags for C or C++ in the cosmo builds, never for assembly |
 | `COSMO_KEEP_PROFILE=1` | do not override `codegen-units`/`lto` |
+| `COSMO_PROGRESS` | append the per-architecture builds' progress to this file instead of the terminal |
 
 ## Caveats
 
-* Cargo captures build-script output, so the two-architecture build is **silent
-  until it fails**.
+* Cargo holds build-script output until the script exits, so the
+  per-architecture builds print their progress straight to the terminal, or to
+  the file `COSMO_PROGRESS` names when output is piped and a wrapper shows it.
 * The nested build needs its own target directory (~190MB) because the outer
   cargo holds an exclusive lock on `target/`.
 * `cargo check` and `cargo clippy` are detected and skipped, except `cargo check`

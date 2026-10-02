@@ -85,11 +85,13 @@
 //! | `COSMO_RUSTFLAGS` | extra rustflags for the cosmo builds only |
 //! | `COSMO_CFLAGS`, `COSMO_CXXFLAGS` | extra flags for C or C++ in the cosmo builds, never for assembly |
 //! | `COSMO_KEEP_PROFILE=1` | do not override `codegen-units`/`lto` |
+//! | `COSMO_PROGRESS` | append the per-architecture builds' progress to this file instead of the terminal |
 //!
 //! # Caveats
 //!
-//! Cargo captures build-script output, so the two-architecture build is silent
-//! until it fails. The nested build needs its own target directory (~190MB)
+//! Cargo holds build-script output until the script exits, so the
+//! per-architecture builds print their progress straight to the terminal, or to
+//! the file `COSMO_PROGRESS` names. The nested build needs its own target directory (~190MB)
 //! because the outer cargo holds an exclusive lock on `target/`. And the APE
 //! runs on Linux today: rustc bakes in Linux's OS constants while cosmopolitan
 //! resolves them at load time, which the `cosmo-compat` shim translates at the
