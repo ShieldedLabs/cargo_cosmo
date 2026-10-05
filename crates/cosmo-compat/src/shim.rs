@@ -480,7 +480,10 @@ pub unsafe extern "C" fn __wrap_sem_timedwait(sem: *mut c_void, ts: *const Times
 /// waiter notices the word change on its next slice. Millisecond wake latency
 /// on an idle park is free; correctness only needs the value check to be right.
 unsafe extern "C" {
-    fn __cosmo_real_syscall(n: core::ffi::c_long, ...) -> core::ffi::c_long;
+    // Fixed-arity on purpose: forwarding through a C-variadic declaration loses
+    // the arguments on this ABI; the generated pass-through that this replaced
+    // passed them as six usize and that is what works.
+    fn __cosmo_real_syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize;
 }
 fn futex_now_ns() -> i64 {
     let mut t = Timespec { tv_sec: 0, tv_nsec: 0 };
@@ -490,15 +493,19 @@ fn futex_now_ns() -> i64 {
 fn futex_sleep_ms(ms: c_int) {
     unsafe { __cosmo_real_poll(core::ptr::null_mut(), 0, if ms < 1 { 1 } else { ms }) };
 }
-fn futex_err(code: c_int) -> core::ffi::c_long {
+fn futex_err(code: c_int) -> isize {
     unsafe { *__errno_location() = code };
-    -1
+    -1isize
 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_syscall(n: core::ffi::c_long, a1: usize, a2: usize, a3: usize, a4: usize, a5: usize, a6: usize) -> core::ffi::c_long {
+pub unsafe extern "C" fn __wrap_syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
+    let n = a as core::ffi::c_long;
     if n != 202 && n != 98 { // SYS_futex: 202 on x86_64, 98 on arm64/generic
-        return unsafe { __cosmo_real_syscall(n, a1, a2, a3, a4, a5, a6) };
+        let r = unsafe { __cosmo_real_syscall(a, b, c, d, e, f) };
+        if r as i32 == -1 { fix_errno(); }
+        return r;
     }
+    let (a1, a2, a3, a4, a5, a6) = (b, c, d, e, f, 0usize);
     let addr = a1 as *const u32;
     let raw = a2 as c_int;
     let op = raw & 0x7f;
