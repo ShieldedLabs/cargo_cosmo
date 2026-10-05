@@ -1560,13 +1560,6 @@ pub unsafe extern "C" fn __wrap_sysconf(a: usize, b: usize, c: usize, d: usize, 
     if r as i32 == -1 { crate::shim::fix_errno(); }
     r
 }
-unsafe extern "C" { fn __cosmo_real_syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let r = unsafe { __cosmo_real_syscall(a, b, c, d, e, f) };
-    if r as i32 == -1 { crate::shim::fix_errno(); }
-    r
-}
 unsafe extern "C" { fn __cosmo_real_unlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_unlink(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {

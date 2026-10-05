@@ -66,7 +66,7 @@ PASSTHROUGH = {
        lchown listen lseek mkdir mkfifo munmap pause
       pread preadv pwrite pwritev read readlink
       readv rmdir sched_getaffinity sendfile setgid setgroups setpgid
-      setsid setuid splice symlink sysconf syscall unlink write writev
+      setsid setuid splice symlink sysconf unlink write writev
       shutdown mprotect sigaltstack""".split(),
    "ptr": "fdopendir getcwd opendir readdir realpath".split(),
    "code": """getpwuid_r posix_spawnattr_destroy posix_spawnattr_init
@@ -83,6 +83,9 @@ HAND = """open openat fcntl ioctl socket socketpair accept4 setsockopt getsockop
    sendto recv recvfrom sendmsg recvmsg poll mmap pipe2 sigaction signal kill killpg
    sigaddset waitpid unlinkat linkat renameat rename fchmodat utimensat getaddrinfo
    pthread_setschedparam
+   pthread_cond_timedwait pthread_mutex_timedlock
+   pthread_rwlock_timedrdlock pthread_rwlock_timedwrlock sem_timedwait
+   syscall
    freeaddrinfo clock_gettime clock_nanosleep stat fstat lstat
    bind connect getsockname getpeername""".split()
 

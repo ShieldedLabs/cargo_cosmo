@@ -72,12 +72,16 @@ pthread_attr_getguardsize
 pthread_attr_getstack
 pthread_attr_init
 pthread_attr_setstacksize
+pthread_cond_timedwait
 pthread_create
 pthread_detach
 pthread_getattr_np
 pthread_join
 pthread_key_create
 pthread_key_delete
+pthread_mutex_timedlock
+pthread_rwlock_timedrdlock
+pthread_rwlock_timedwrlock
 pthread_setname_np
 pthread_setschedparam
 pthread_setspecific
@@ -95,6 +99,7 @@ rename
 renameat
 rmdir
 sched_getaffinity
+sem_timedwait
 send
 sendfile
 sendmsg

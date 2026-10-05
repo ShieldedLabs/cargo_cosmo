@@ -402,6 +402,146 @@ pub unsafe extern "C" fn __wrap_pthread_setschedparam(thread: usize, policy: c_i
     }
     95 // ENOTSUP: Linux realtime policies have no XNU equivalent on this path
 }
+
+// ---- timed waits -----------------------------------------------------------
+/// POSIX timed waits take an absolute deadline on CLOCK_REALTIME, but callers
+/// that think on a monotonic clock -- the Rust std thread parker among them --
+/// hand in a deadline computed from CLOCK_MONOTONIC. Cosmo judges the deadline
+/// against real time, so such a value reads as "already past" and the wait
+/// returns ETIMEDOUT before ever blocking; every idle scheduler park (rayon's
+/// worker pool, tokio's park) then spins and burns a core per parked thread.
+/// Rebase any deadline that cannot be a real-time date (before 2020 -- i.e. a
+/// monotonic reading) from CLOCK_MONOTONIC onto CLOCK_REALTIME before handing
+/// it down. These functions return the error as their return value (sem_* is
+/// the exception and keeps -1/errno), so the codes are translated to Linux's
+/// numbering like every other wrapper's.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Timespec { tv_sec: i64, tv_nsec: i64 }
+extern "C" {
+    fn __cosmo_real_pthread_cond_timedwait(c: *mut c_void, m: *mut c_void, ts: *const Timespec) -> c_int;
+    fn __cosmo_real_pthread_mutex_timedlock(m: *mut c_void, ts: *const Timespec) -> c_int;
+    fn __cosmo_real_pthread_rwlock_timedrdlock(rw: *mut c_void, ts: *const Timespec) -> c_int;
+    fn __cosmo_real_pthread_rwlock_timedwrlock(rw: *mut c_void, ts: *const Timespec) -> c_int;
+    fn __cosmo_real_sem_timedwait(sem: *mut c_void, ts: *const Timespec) -> c_int;
+}
+unsafe fn rebase_deadline(ts: *const Timespec) -> Timespec {
+    let mut out = unsafe { *ts };
+    if out.tv_sec < 1_600_000_000 {
+        let mut rt = Timespec { tv_sec: 0, tv_nsec: 0 };
+        let mut mn = Timespec { tv_sec: 0, tv_nsec: 0 };
+        unsafe {
+            __wrap_clock_gettime(0, &mut rt as *mut _ as *mut c_void); // CLOCK_REALTIME
+            __wrap_clock_gettime(1, &mut mn as *mut _ as *mut c_void); // CLOCK_MONOTONIC
+        }
+        let delta_ns = (out.tv_sec - mn.tv_sec) as i64 * 1_000_000_000 + (out.tv_nsec - mn.tv_nsec) as i64;
+        let now_ns = rt.tv_sec as i64 * 1_000_000_000 + rt.tv_nsec as i64 + if delta_ns > 0 { delta_ns } else { 0 };
+        out.tv_sec = now_ns / 1_000_000_000;
+        out.tv_nsec = now_ns % 1_000_000_000;
+    }
+    out
+}
+#[inline] fn pret(rc: c_int) -> c_int { if rc != 0 { xlate::errno_to_linux(rc as i64) as c_int } else { 0 } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_pthread_cond_timedwait(c: *mut c_void, m: *mut c_void, ts: *const Timespec) -> c_int {
+    let fixed = unsafe { rebase_deadline(ts) };
+    pret(unsafe { __cosmo_real_pthread_cond_timedwait(c, m, &fixed) })
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_pthread_mutex_timedlock(m: *mut c_void, ts: *const Timespec) -> c_int {
+    let fixed = unsafe { rebase_deadline(ts) };
+    pret(unsafe { __cosmo_real_pthread_mutex_timedlock(m, &fixed) })
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_pthread_rwlock_timedrdlock(rw: *mut c_void, ts: *const Timespec) -> c_int {
+    let fixed = unsafe { rebase_deadline(ts) };
+    pret(unsafe { __cosmo_real_pthread_rwlock_timedrdlock(rw, &fixed) })
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_pthread_rwlock_timedwrlock(rw: *mut c_void, ts: *const Timespec) -> c_int {
+    let fixed = unsafe { rebase_deadline(ts) };
+    pret(unsafe { __cosmo_real_pthread_rwlock_timedwrlock(rw, &fixed) })
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_sem_timedwait(sem: *mut c_void, ts: *const Timespec) -> c_int {
+    let fixed = unsafe { rebase_deadline(ts) };
+    ret(unsafe { __cosmo_real_sem_timedwait(sem, &fixed) })
+}
+
+// ---- futex ------------------------------------------------------------------
+/// The Rust std thread parker waits on a futex: `syscall(SYS_futex, FUTEX_WAIT,
+/// ...)`. Cosmo's syscall() has no futex -- the call fails in userspace and
+/// every park returned immediately -- so each idle scheduler (rayon's pool,
+/// tokio's workers, the std's own threads) spun at full tilt. That is what
+/// pegged the node's cores with mining disabled. Emulate the futex-word
+/// protocol here: WAIT returns EAGAIN when the word has already changed (the
+/// caller re-checks), otherwise sleeps in 1 ms slices until the word changes or
+/// the deadline passes; WAKE is a no-op that reports nobody woken, because a
+/// waiter notices the word change on its next slice. Millisecond wake latency
+/// on an idle park is free; correctness only needs the value check to be right.
+unsafe extern "C" {
+    fn __cosmo_real_syscall(n: core::ffi::c_long, ...) -> core::ffi::c_long;
+}
+fn futex_now_ns() -> i64 {
+    let mut t = Timespec { tv_sec: 0, tv_nsec: 0 };
+    unsafe { __wrap_clock_gettime(1, &mut t as *mut _ as *mut c_void) };
+    t.tv_sec as i64 * 1_000_000_000 + t.tv_nsec as i64
+}
+fn futex_sleep_ms(ms: c_int) {
+    unsafe { __cosmo_real_poll(core::ptr::null_mut(), 0, if ms < 1 { 1 } else { ms }) };
+}
+fn futex_err(code: c_int) -> core::ffi::c_long {
+    unsafe { *__errno_location() = code };
+    -1
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_syscall(n: core::ffi::c_long, a1: usize, a2: usize, a3: usize, a4: usize, a5: usize, a6: usize) -> core::ffi::c_long {
+    if n != 202 && n != 98 { // SYS_futex: 202 on x86_64, 98 on arm64/generic
+        return unsafe { __cosmo_real_syscall(n, a1, a2, a3, a4, a5, a6) };
+    }
+    let addr = a1 as *const u32;
+    let raw = a2 as c_int;
+    let op = raw & 0x7f;
+    match op {
+        0 | 9 => { // FUTEX_WAIT / FUTEX_WAIT_BITSET
+            let val = a3 as u32;
+            if unsafe { *addr } != val { return futex_err(11); } // EAGAIN: already changed
+            let ts = a4 as *const Timespec;
+            let end_ns = if ts.is_null() { None } else {
+                let t = unsafe { *ts };
+                // FUTEX_WAIT's timeout is relative; WAIT_BITSET's is absolute on
+                // the monotonic clock (real time if FUTEX_CLOCK_REALTIME). The
+                // callers re-check the word after any return, so an imprecise
+                // end time costs latency, never correctness.
+                let rel_ns = if op == 0 || (raw & 256) != 0 {
+                    if op == 0 { t.tv_sec as i64 * 1_000_000_000 + t.tv_nsec as i64 }
+                    else {
+                        let mut rt = Timespec { tv_sec: 0, tv_nsec: 0 };
+                        unsafe { __wrap_clock_gettime(0, &mut rt as *mut _ as *mut c_void) };
+                        (t.tv_sec - rt.tv_sec) as i64 * 1_000_000_000 + (t.tv_nsec - rt.tv_nsec) as i64
+                    }
+                } else {
+                    (t.tv_sec as i64 * 1_000_000_000 + t.tv_nsec as i64) - futex_now_ns()
+                };
+                Some(futex_now_ns() + if rel_ns > 0 { rel_ns } else { 0 })
+            };
+            loop {
+                if unsafe { *addr } != val { return 0; }
+                match end_ns {
+                    Some(end) => {
+                        let left_ns = end - futex_now_ns();
+                        if left_ns <= 0 { return futex_err(110); } // ETIMEDOUT
+                        let left_ms = (left_ns + 999_999) / 1_000_000;
+                        futex_sleep_ms(if left_ms > 1 { 1 } else { 1 });
+                    }
+                    None => futex_sleep_ms(1),
+                }
+            }
+        }
+        1 | 10 => 0, // FUTEX_WAKE(_BITSET): waiters notice the word change on their next slice
+        _ => futex_err(38), // ENOSYS
+    }
+}
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getaddrinfo(node: *const c_char, service: *const c_char, hints: *const AddrInfo, res: *mut *mut AddrInfo) -> c_int {
     let mut h_copy;
