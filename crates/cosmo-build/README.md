@@ -13,10 +13,7 @@ two ELFs with `apelink`, which is what cosmocc does for C.
 ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 
 [build-dependencies]
-cosmo-build = { version = "5", optional = true }
-
-[target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "5"
+cosmo-build = { version = "10", optional = true }
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -28,10 +25,6 @@ fn main() {
    #[cfg(feature = "ape")]
    cosmo_build::apeify();
 }
-
-// src/main.rs
-#[cfg(cosmo)]
-extern crate cosmo_compat as _;
 ```
 
 ```
@@ -40,6 +33,14 @@ $ ./target/cosmo/release/myprog.com
 ```
 
 With the feature off, this crate is never fetched, compiled or run.
+
+Version 10 embeds and privately links the matching normalization shim: there is
+no runtime Cargo dependency and no `extern crate` line to add. An explicit
+`cosmo-compat = "10"` dependency remains supported; other majors are rejected.
+The private shim build uses `libc` and `rustix` without adding them to the
+application's Cargo graph. Applications using `rustix` should keep the explicit
+compat dependency so its `use-libc` feature unifies with their own dependencies;
+private injection cannot switch another Cargo graph's raw-syscall backend.
 
 ### A library crate
 
@@ -82,7 +83,7 @@ the machine and nothing is fetched on a warm build.
 
 | from | what | size | verified by |
 |---|---|---|---|
-| crates.io | `cosmo-build`, `cosmo-compat` and 45 transitive crates (`ureq`, `zip`, `sha2` and their trees) | ~5MB | cargo's registry checksums |
+| crates.io | `cosmo-build` and its download/unpack dependencies (`ureq`, `zip` and their trees); the runtime shim is embedded | ~5MB | cargo's registry checksums |
 | static.rust-lang.org | the pinned nightly plus `rust-src`, via rustup, only if not already installed | ~1.6GB on disk | rustup's signed manifests |
 | cosmo.zip | `cosmocc-4.0.2.zip` | 441,763,966 bytes (~1.4GB unpacked) | SHA-256 pinned in the crate |
 
@@ -122,8 +123,10 @@ bytes. A mismatch deletes the download and fails the build.
   script's environment and will build an APE. Set `COSMO_APE=0` where that matters.
 * The APE is a genuine fat binary but **runs on Linux today** — rustc bakes in
   Linux's OS constants while cosmopolitan resolves them at load time. The
-  `cosmo-compat` shim translates 123 libc entry points at the boundary, and
-  macOS/arm64 is measured working; the rest is untested. See the
+  embedded `cosmo-compat` shim translates libc entry points at the boundary.
+  Version 10 networking/futex changes were executed on Linux x86-64 only;
+  arm64 builds but was not executed, and Windows/macOS/BSD paths remain unrun
+  for this release. Historical macOS/arm64 std results predate these changes. See the
   [repository](https://github.com/ShieldedLabs/cargo_cosmo).
 
 MIT licensed.

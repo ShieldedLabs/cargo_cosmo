@@ -141,6 +141,30 @@ fn ld(arch: &str, args: Vec<String>) -> i32 {
    }
    let Some(output) = output else { die("cosmo-ld: no -o in link line") };
 
+   // Explicit compat dependencies take precedence over the private shim. Fat
+   // LTO may have merged all rlibs into objects; inspect those only when there
+   // are no rlibs left. Keep upstream's native-object rewriting below intact.
+   let inject = rest.iter().position(|a| {
+      Path::new(a).file_name().and_then(|n| n.to_str())
+         .is_some_and(|n| n.starts_with("cosmo_compat_inject-") && n.ends_with(".o"))
+   }).map(|i| rest.remove(i));
+   if let Some(inject) = inject {
+      let mut explicit = rest.iter().any(|a| {
+         Path::new(a).file_name().and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with("libcosmo_compat-") && n.ends_with(".rlib"))
+      });
+      if !explicit && !rest.iter().any(|a| a.ends_with(".rlib")) {
+         explicit = rest.iter().filter(|a| a.ends_with(".o")).any(|a| {
+            command(&bin(&format!("{arch}-linux-cosmo-nm")))
+               .args(["-g", "--defined-only", a]).output().ok()
+               .filter(|o| o.status.success()).is_some_and(|o| {
+                  String::from_utf8_lossy(&o.stdout).lines().any(|l| l.split_whitespace().last() == Some("__wrap_open"))
+               })
+         });
+      }
+      if !explicit { rest.push(inject); }
+   }
+
    // COSMO_LD_DEBUG=<file> records the reconciled link line. It is the only way
    // to see what rustc actually handed over -- which rlibs, in which order, and
    // whether fat LTO merged them into one object before the linker saw them.

@@ -13,13 +13,9 @@
 //! ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 //!
 //! [build-dependencies]
-//! cosmo-build = { version = "5", optional = true }
+//! cosmo-build = { version = "10", optional = true }
 //!
-//! # The shim has to be in the crate graph or the link fails with a hundred
-//! # undefined __wrap_* references. cfg(cosmo) is set only by this crate, so
-//! # ordinary builds neither resolve nor compile it.
-//! [target.'cfg(cosmo)'.dependencies]
-//! cosmo-compat = "6"
+//! # No runtime dependency: the matching shim is injected privately.
 //!
 //! [lints.rust]
 //! unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
@@ -38,12 +34,6 @@
 //! ```toml
 //! [package.metadata.cosmo]
 //! example = "demo"
-//! ```
-//!
-//! ```text
-//! // src/main.rs
-//! #[cfg(cosmo)]
-//! extern crate cosmo_compat as _;
 //! ```
 //!
 //! Then `cargo build -F ape` leaves the APE in `target/cosmo/<profile>/<name>.com`, and a
@@ -65,8 +55,11 @@
 //! Once, into a cache shared by every project; a warm build touches the network
 //! not at all.
 //!
-//! * crates.io: this crate, `cosmo-compat`, and 45 transitive crates (~5MB),
-//!   checksummed by cargo.
+//! * crates.io: this crate and its download/unpack dependencies, plus `libc` and
+//!   `rustix` for the privately built embedded shim, checksummed by Cargo. Those
+//!   private dependencies do not enter the application's Cargo graph. An app
+//!   using `rustix` should retain an explicit matching `cosmo-compat` dependency
+//!   to unify its `use-libc` feature; private injection cannot change that graph.
 //! * static.rust-lang.org: the pinned nightly and `rust-src` via rustup, only
 //!   if they are not already installed.
 //! * cosmo.zip: `cosmocc-4.0.2.zip`, 441,763,966 bytes, ~1.4GB unpacked. This
@@ -102,6 +95,7 @@ use std::path::{Path, PathBuf};
 
 mod cache;
 mod driver;
+mod inject;
 mod manifest;
 mod pairing;
 mod sha256;

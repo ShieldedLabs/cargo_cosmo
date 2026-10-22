@@ -56,7 +56,9 @@ anything exotic does. `cosmo-compat` redefines the symbol with XSI semantics;
 the linker prefers it because an archive member is only pulled in to satisfy a
 still-undefined symbol.
 
-Depend on it from any cosmo target:
+The build drivers now inject a private copy of this shim automatically: a
+project needs **no runtime Cargo dependencies**, even for full `std`. An explicit
+dependency is still supported (and takes precedence over the injected copy):
 
 ```toml
 [dependencies]
@@ -66,6 +68,48 @@ cosmo-compat = { path = "../../crates/cosmo-compat" }
 ```rust
 extern crate cosmo_compat as _;
 ```
+
+## Version 10: dependency-free builds and socket ABI
+
+Both build routes compile the shim in a private Cargo build, retaining `libc`'s
+exact target-specific `stat` and `sigaction` layouts. That private build may
+fetch `libc`, `rustix` and their dependencies; none enters the application's
+Cargo graph. Its internal Rust symbols are localized so they cannot collide
+with the application's runtime. The nightly pin is honored even when invoking
+the Python driver outside this repo.
+
+This supports genuinely zero-dependency applications such as STP. For an
+application that uses `rustix`, keep an explicit `cosmo-compat = "10"`
+dependency: its `rustix/use-libc` feature unifies in the application's graph,
+routing those calls through the ABI translators. A privately injected shim
+cannot change features in a separate application Cargo graph, so injection
+alone does not make third-party raw-syscall backends portable.
+
+Call libc by its ordinary names with **Linux constants and layouts** under
+`cfg(cosmo)`, not `__cosmo_real_*`. The new wrappers cover `ppoll`, `getifaddrs`,
+and libc `syscall(SYS_futex, ...)` WAIT/WAKE and all-bits WAIT_BITSET/WAKE_BITSET.
+Futex waits use Cosmopolitan's blocking implementation rather than spinning.
+Raw inline-assembly syscalls still bypass normalization and are not portable.
+
+Socket options unknown or unavailable on a non-Linux host fail closed with
+Linux `ENOPROTOOPT` (92), rather than reusing an unrelated host option number.
+Linux PMTUDISC_PROBE maps to Windows option 71/value 3, and to XNU's IPv4/IPv6
+DONTFRAG boolean; unsupported PMTU policies return EINVAL. XNU IPv6 TCLASS and
+PKTINFO control headers are converted between Linux's 16-byte/8-aligned and
+XNU's 12-byte/4-aligned layouts. Non-Linux send control is bounded to 1024 bytes;
+unsupported or malformed sends fail EINVAL. Receive conversion truncation sets
+MSG_CTRUNC, including dropped control types. On Windows, Cosmopolitan has no
+ancillary receive path: receive-control enables return ENOPROTOOPT, `recvmsg`
+strips the buffer and returns `msg_controllen = 0`, and sends with control fail
+EINVAL. The untested BSDs reject send control and discard receive control.
+
+Version 10 runtime validation was on **Linux x86-64 only**: dependency-free std,
+IPv4/IPv6 PMTU/TOS/TCLASS/PKTINFO, socketpair/ppoll/getifaddrs, and sleeping
+Condvar/park waits. Both architecture halves build and the fat APE passes
+`pecheck`; arm64 execution and the new networking paths on Windows, XNU and
+BSD have **not** been verified. Host unit tests exercise extracted XNU/Windows
+constant columns and synthetic control-header conversion; they are not host
+runtime tests. Earlier macOS results below predate these changes.
 
 ## Testing on macOS and Windows
 
@@ -205,22 +249,11 @@ fetches these tools, the pinned nightly (`rust-src` included) and cosmocc into
 a shared cache outside the tree, so a second project costs no disk.
 `COSMO_HOME=<dir>` moves the cache, `COSMO_REF=<tag|sha>` pins the tools.
 
-One thing is common to every route: the shim has to be in the crate graph, or
-the link fails with a hundred undefined `__wrap_*` references. Scoping it to
-`cfg(cosmo)`, which `cargo-cosmo` sets, keeps ordinary builds untouched.
-
-```toml
-[target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "6"
-
-[lints.rust]                                    # optional: quiet the warning
-unexpected_cfgs = { level = "allow", check-cfg = ['cfg(cosmo)'] }
-```
-
-```rust
-#[cfg(cosmo)]
-extern crate cosmo_compat as _;
-```
+The driver injects the matching normalization shim as a private linker object.
+No `cosmo-compat` dependency or `extern crate` line is required. Existing projects
+may retain an explicit `cosmo-compat = "10"` dependency; it must match the
+`cosmo-build` major, and the linker suppresses the private copy in that case.
+A dependency-free crate can use `tools/cargo-cosmo build --release` unchanged.
 
 ### As a feature flag
 
@@ -232,7 +265,7 @@ optional, so with the feature off it is never even compiled:
 ape = ["dep:cosmo-build"]      # or: default = ["ape"] to always build one
 
 [build-dependencies]
-cosmo-build = { version = "6", optional = true }
+cosmo-build = { version = "10", optional = true }
 ```
 
 ```rust
@@ -294,7 +327,7 @@ the machine and nothing is fetched on a warm build.
 
 | from | what | size | verified by |
 |---|---|---|---|
-| crates.io | `cosmo-build`, `cosmo-compat` and 45 transitive crates (`ureq`, `zip`, `sha2` and their trees) | ~5MB | cargo's registry checksums |
+| crates.io | `cosmo-build` and its download/unpack dependencies (`ureq`, `zip` and their trees); the runtime shim is embedded | ~5MB | cargo's registry checksums |
 | static.rust-lang.org | the pinned nightly plus `rust-src`, via rustup, only if not already installed | ~1.6GB on disk | rustup's signed manifests |
 | cosmo.zip | `cosmocc-4.0.2.zip` | 441,763,966 bytes (~1.4GB unpacked) | SHA-256 pinned in the crate |
 

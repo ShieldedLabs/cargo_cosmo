@@ -1,0 +1,8 @@
+[package]
+name = "zero-deps-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Deliberately no dependencies, including cosmo-compat.
+[workspace]

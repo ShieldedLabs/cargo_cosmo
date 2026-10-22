@@ -174,6 +174,32 @@ pub fn test_host<const N: usize>(windows: &[i64; N], xnu: &[i64; N]) -> [i64; N]
     if std::env::var("COSMO_TEST_HOST").map(|v| v == "xnu").unwrap_or(false) { *xnu } else { *windows }
 }
 
+/// cosmo's `__hostos` bits.
+pub const HOST_LINUX: i32 = 1;
+pub const HOST_WINDOWS: i32 = 4;
+pub const HOST_XNU: i32 = 8;
+
+/// The running host, as cosmo's `__hostos` reports it. Tests stand in the
+/// same host as `test_host` (Windows by default, XNU with COSMO_TEST_HOST=xnu,
+/// Linux with COSMO_TEST_HOST=linux, FreeBSD with COSMO_TEST_HOST=freebsd).
+#[inline]
+pub fn hostos() -> i32 {
+    #[cfg(not(test))]
+    {
+        unsafe extern "C" { static __hostos: i32; }
+        unsafe { __hostos }
+    }
+    #[cfg(test)]
+    {
+        match std::env::var("COSMO_TEST_HOST").as_deref() {
+            Ok("xnu") => HOST_XNU,
+            Ok("linux") => HOST_LINUX,
+            Ok("freebsd") => 32,
+            _ => HOST_WINDOWS,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

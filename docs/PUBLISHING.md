@@ -6,13 +6,11 @@ translators for exactly that list. A version of one paired with a different
 version of the other is a link error in every consuming project.
 `cosmo-build`'s test suite asserts the two agree; run it from a checkout.
 
-## Before the first publish
+## Before publishing
 
-* `cargo login` with an account that owns nothing yet -- both names were free as
-  of this writing, and neither crate has been reserved.
-* Decide whether to also take `cargo-cosmo` on crates.io. It is unclaimed, and
-  the Rust driver now lives inside `cosmo-build`, so a real `cargo install
-  cargo-cosmo` binary is a small step from here.
+Both crates are already published through 9.0.1. This release is 10.0.0 for
+both; verify registry versions and the current upstream branch before uploading.
+Use a crates.io account authorized to publish both names.
 
 ## Every publish
 
@@ -34,7 +32,7 @@ cargo publish --manifest-path crates/cosmo-compat/Cargo.toml
 cargo publish --manifest-path crates/cosmo-build/Cargo.toml
 
 # 5. tag, so the version is recoverable from the repo
-git tag -a v5.0.2 -m 'cosmo-build/cosmo-compat 5.0.2' && git push --tags
+git tag -a v10.0.0 -m 'cosmo-build/cosmo-compat 10.0.0' && git push origin v10.0.0
 ```
 
 ## What docs.rs will show
@@ -47,9 +45,9 @@ land on from crates.io.
 
 ## Versioning: majors only
 
-Both crates carry the same version and only the major moves. `1.0.0`, then
-`2.0.0`, then `3.0.0`. There are no minor or patch releases, and there is
-never a version of one crate without the matching version of the other.
+Both crates carry the same version. From 10.0.0 onward, only the major moves:
+`10.0.0`, then `11.0.0`. Earlier history includes patch releases such as 9.0.1;
+do not reuse any already-published version.
 
 This is not the usual semver discipline, and it buys something specific here.
 `cosmo-build` embeds the list of symbols the linker is told to `--wrap`;
@@ -70,8 +68,10 @@ that is honest: any release that moves either of those *is* breaking.
 `cosmo_build::apeify` checks the pairing before it builds anything. It reads
 the resolved `Cargo.lock`, compares majors, and fails in a fifth of a second
 with what to change -- rather than after a two-minute build, in linker output.
-It catches the missing-dependency case with the same message, which is the
-error a new user is most likely to hit.
+Since version 10, a missing explicit dependency is supported: the build driver
+uses embedded matching shim sources to link a private object. An explicit
+dependency still has to match. `tools/gen-assets.py` embeds those sources too,
+and `cosmo-build` tests compare the embedded bytes against the sibling crate.
 
 ## When cosmocc moves
 

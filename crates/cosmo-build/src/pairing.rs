@@ -25,16 +25,7 @@ pub fn check(manifest_dir: &Path) -> Result<(), String> {
    };
 
    let Some(theirs) = locked_version(&text, "cosmo-compat") else {
-      return Err(format!(
-         "cosmo-compat is not in this project's dependency graph.\n\
-          The shim is not optional -- without it the link fails with a hundred\n\
-          undefined __wrap_* symbols. Add to Cargo.toml:\n\n    \
-          [target.'cfg(cosmo)'.dependencies]\n    \
-          cosmo-compat = \"{major}\"\n\n\
-          and to the crate root:\n\n    \
-          #[cfg(cosmo)]\n    extern crate cosmo_compat as _;",
-         major = major(ours)
-      ));
+      return Ok(()); // the driver supplies the private, matching shim object
    };
 
    if major(&theirs) != major(ours) {

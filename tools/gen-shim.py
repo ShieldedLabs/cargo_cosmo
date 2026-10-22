@@ -45,6 +45,7 @@ GROUPS = {
    "ipv6": "enum", "sig": "enum", "clock": "enum", "fcntl": "enum", "fcntl2": "enum",
    "fcntl3": "enum", "ioctl": "enum", "access": "mask", "lock": "mask", "madv": "enum",
    "shut": "enum", "ss": "enum", "scm": "enum", "limits": "enum", "rlimit": "enum",
+   "iff": "mask",
 }
 
 # std's libc imports on the cosmo target (nm -u over the build-std rlibs), minus
@@ -85,7 +86,7 @@ HAND = """open openat fcntl ioctl socket socketpair accept4 setsockopt getsockop
    pthread_setschedparam
    pthread_cond_timedwait pthread_mutex_timedlock
    pthread_rwlock_timedrdlock pthread_rwlock_timedwrlock sem_timedwait
-   syscall
+   syscall ppoll getifaddrs
    freeaddrinfo clock_gettime clock_nanosleep stat fstat lstat
    bind connect getsockname getpeername""".split()
 

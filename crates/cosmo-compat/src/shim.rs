@@ -110,8 +110,8 @@ pub fn fix_errno() {
 #[inline] fn sig_back(s: c_int) -> c_int { gen::sig().to_linux(s as i64) as c_int }
 
 /// sockaddr.sa_family is the first u16 of every sockaddr; AF_INET6 differs per host.
-unsafe fn family_to_host(addr: *mut u16) { if !addr.is_null() { unsafe { *addr = gen::af().to_host(*addr as i64) as u16; } } }
-unsafe fn family_to_linux(addr: *mut u16) { if !addr.is_null() { unsafe { *addr = gen::af().to_linux(*addr as i64) as u16; } } }
+unsafe fn family_to_host(addr: *mut u16) { if !addr.is_null() { unsafe { core::ptr::write_unaligned(addr, gen::af().to_host(core::ptr::read_unaligned(addr) as i64) as u16); } } }
+unsafe fn family_to_linux(addr: *mut u16) { if !addr.is_null() { unsafe { core::ptr::write_unaligned(addr, gen::af().to_linux(core::ptr::read_unaligned(addr) as i64) as u16); } } }
 /// Input sockaddrs are const: copy into a stack buffer with the family rewritten.
 unsafe fn with_host_addr<R>(addr: *const c_void, alen: u32, f: impl FnOnce(*const c_void) -> R) -> R {
     if addr.is_null() || alen < 2 || alen as usize > 128 { return f(addr); }
@@ -282,38 +282,40 @@ pub unsafe extern "C" fn __wrap_accept4(fd: c_int, addr: *mut c_void, alen: *mut
     if r >= 0 { unsafe { family_to_linux(addr as *mut u16); } }
     r
 }
-/// (level, name) in host numbering. Levels: SOL_SOCKET is in the `so` group;
-/// IPPROTO_* are the same everywhere. Option names are per level.
-fn sockopt(level: c_int, name: c_int) -> (c_int, c_int) {
-    const IPPROTO_IP: c_int = 0; const IPPROTO_TCP: c_int = 6; const IPPROTO_IPV6: c_int = 41;
-    let so = gen::so();
-    let sol_socket_linux = so.name_of_linux(1).map(|_| 1).unwrap_or(1);
-    if level == sol_socket_linux && so.names.contains(&"SOL_SOCKET") {
-        return (so.to_host(1) as c_int, so.to_host(name as i64) as c_int);
-    }
-    match level {
-        IPPROTO_TCP => (level, gen::tcp().to_host(name as i64) as c_int),
-        IPPROTO_IP => (level, gen::ip().to_host(name as i64) as c_int),
-        IPPROTO_IPV6 => (level, gen::ipv6().to_host(name as i64) as c_int),
-        _ => (level, name),
-    }
-}
+// Linux errnos the wrappers set themselves.
+const EINVAL_LINUX: c_int = 22;
+const ENOPROTOOPT_LINUX: c_int = 92;
+const EFAULT_LINUX: c_int = 14;
+#[inline] fn fail(e: c_int) -> c_int { unsafe { *__errno_location() = e; } -1 }
+
+/// Socket options: see net.rs. Absent or unknown on this host -> ENOPROTOOPT,
+/// never passed through raw.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_setsockopt(fd: c_int, level: c_int, name: c_int, val: *const c_void, len: u32) -> c_int {
-    let (l, n) = sockopt(level, name);
-    ret(unsafe { __cosmo_real_setsockopt(fd, l, n, val, len) })
+    let Some(o) = crate::net::sockopt(level, name) else { return fail(ENOPROTOOPT_LINUX) };
+    if o.val == crate::net::Val::Same {
+        return ret(unsafe { __cosmo_real_setsockopt(fd, o.level, o.name, val, len) });
+    }
+    if val.is_null() || (len as usize) < 4 { return fail(EINVAL_LINUX); }
+    let Some(hv) = crate::net::val_to_host(o.val, unsafe { core::ptr::read_unaligned(val as *const c_int) }) else { return fail(EINVAL_LINUX) };
+    ret(unsafe { __cosmo_real_setsockopt(fd, o.level, o.name, &hv as *const c_int as *const c_void, 4) })
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getsockopt(fd: c_int, level: c_int, name: c_int, val: *mut c_void, len: *mut u32) -> c_int {
     const SO_ERROR_LINUX: c_int = 4; const SO_TYPE_LINUX: c_int = 3;
-    let (l, n) = sockopt(level, name);
-    let r = unsafe { __cosmo_real_getsockopt(fd, l, n, val, len) };
+    let Some(o) = crate::net::sockopt(level, name) else { return fail(ENOPROTOOPT_LINUX) };
+    let r = unsafe { __cosmo_real_getsockopt(fd, o.level, o.name, val, len) };
     if r == -1 { fix_errno(); return r; }
     // Results that are themselves constants.
-    if level == 1 && !val.is_null() && unsafe { *len } >= 4 {
+    if !val.is_null() && !len.is_null() && unsafe { *len } >= 4 {
         let p = val as *mut c_int;
-        if name == SO_ERROR_LINUX { unsafe { *p = xlate::errno_to_linux(*p as i64) as c_int; } }
-        if name == SO_TYPE_LINUX { unsafe { *p = gen::sock().to_linux(*p as i64) as c_int; } }
+        let mut v = unsafe { core::ptr::read_unaligned(p) };
+        if o.val != crate::net::Val::Same { { v = crate::net::val_to_linux(o.val, v); } }
+        if level == crate::net::SOL_SOCKET {
+            if name == SO_ERROR_LINUX { { v = xlate::errno_to_linux(v as i64) as c_int; } }
+            if name == SO_TYPE_LINUX { { v = gen::sock().to_linux(v as i64) as c_int; } }
+        }
+        unsafe { core::ptr::write_unaligned(p, v); }
     }
     r
 }
@@ -362,27 +364,84 @@ pub unsafe extern "C" fn __wrap_recvfrom(fd: c_int, buf: *mut c_void, n: usize, 
     if r >= 0 { unsafe { family_to_linux(addr as *mut u16); } }
     r
 }
+/// Scratch space for converted control data. Linux callers on this target
+/// use a few dozen bytes (TCLASS + PKTINFO); larger buffers are converted up to
+/// this size and the rest is reported as truncation.
+const CTL_MAX: usize = 1024;
+#[repr(C, align(8))]
+struct Ctl([u8; CTL_MAX]);
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_sendmsg(fd: c_int, msg: *const MsgHdr, flags: c_int) -> isize {
-    // The name pointer inside the header is const to the caller; rewrite through a copy of the header.
+    if msg.is_null() { return fail(EFAULT_LINUX) as isize; }
     let m = unsafe { &*msg };
-    if m.name.is_null() { return rets(unsafe { __cosmo_real_sendmsg(fd, msg, msg_flags(flags)) }); }
+    let host = xlate::hostos();
+    let mut ctl = Ctl([0; CTL_MAX]);
+    let (control, controllen) = if host == xlate::HOST_LINUX {
+        (m.control, m.controllen)
+    } else if m.controllen == 0 {
+        (core::ptr::null_mut(), 0)
+    } else if m.control.is_null() {
+        return fail(EFAULT_LINUX) as isize;
+    } else if host == xlate::HOST_XNU && m.controllen <= CTL_MAX as u64 {
+        match unsafe { crate::net::linux_to_xnu(m.control as *const u8, m.controllen as usize, ctl.0.as_mut_ptr(), CTL_MAX) } {
+            Some(n) => (ctl.0.as_mut_ptr() as *mut c_void, n as u64),
+            None => return fail(EINVAL_LINUX) as isize,
+        }
+    } else {
+        // Windows (cosmopolitan has no ancillary path there) and the untested BSDs.
+        return fail(EINVAL_LINUX) as isize;
+    };
+    // The name pointer inside the header is const to the caller; rewrite through a copy of the header.
     unsafe {
         with_host_addr(m.name, m.namelen, |a| {
-            let copy = MsgHdr { name: a as *mut c_void, namelen: m.namelen, iov: m.iov, iovlen: m.iovlen, control: m.control, controllen: m.controllen, flags: m.flags };
+            let copy = MsgHdr { name: a as *mut c_void, namelen: m.namelen, iov: m.iov, iovlen: m.iovlen, control, controllen, flags: m.flags };
             rets(__cosmo_real_sendmsg(fd, &copy, msg_flags(flags)))
         })
     }
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_recvmsg(fd: c_int, msg: *mut MsgHdr, flags: c_int) -> isize {
-    let r = rets(unsafe { __cosmo_real_recvmsg(fd, msg, msg_flags(flags)) });
-    if r >= 0 {
-        unsafe {
-            family_to_linux((*msg).name as *mut u16);
-            (*msg).flags = gen::msg().to_linux((*msg).flags as i64) as u32;
+    const MSG_CTRUNC_LINUX: u32 = 8;
+    if msg.is_null() { return fail(EFAULT_LINUX) as isize; }
+    let host = xlate::hostos();
+    let m = unsafe { &mut *msg };
+    let namecap = m.namelen;
+    if host == xlate::HOST_LINUX {
+        let r = rets(unsafe { __cosmo_real_recvmsg(fd, msg, msg_flags(flags)) });
+        if r >= 0 {
+            if namecap >= 2 && m.namelen >= 2 { unsafe { family_to_linux(m.name as *mut u16); } }
+            m.flags = gen::msg().to_linux(m.flags as i64) as u32;
         }
+        return r;
     }
+    // Only XNU's ancillary layout is converted. Unsupported hosts receive
+    // without a control buffer: the kernel discards SCM_RIGHTS without installing
+    // descriptors, rather than leaking descriptors from discarded scratch data.
+    let mut ctl = Ctl([0; CTL_MAX]);
+    let convert_control = host == xlate::HOST_XNU;
+    let want_control = !m.control.is_null() && m.controllen != 0;
+    let mut copy = MsgHdr {
+        name: m.name, namelen: m.namelen, iov: m.iov, iovlen: m.iovlen,
+        control: if !convert_control || !want_control { core::ptr::null_mut() } else { ctl.0.as_mut_ptr() as *mut c_void },
+        controllen: if !convert_control || !want_control { 0 } else { core::cmp::min(m.controllen as usize, CTL_MAX) as u64 },
+        flags: 0,
+    };
+    let r = rets(unsafe { __cosmo_real_recvmsg(fd, &mut copy, msg_flags(flags)) });
+    if r < 0 { return r; }
+    if namecap >= 2 && copy.namelen >= 2 { unsafe { family_to_linux(m.name as *mut u16); } }
+    m.namelen = copy.namelen;
+    let mut lflags = gen::msg().to_linux(copy.flags as i64) as u32;
+    let got = if convert_control { core::cmp::min(copy.controllen as usize, CTL_MAX) } else { 0 };
+    m.controllen = if host == xlate::HOST_XNU {
+        let (n, trunc) = unsafe { crate::net::xnu_to_linux(ctl.0.as_ptr(), got, m.control as *mut u8, m.controllen as usize, |fd| { unsafe extern "C" { fn __cosmo_real_close(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize; } __cosmo_real_close(fd as usize, 0, 0, 0, 0, 0); }) };
+        if trunc { lflags |= MSG_CTRUNC_LINUX; }
+        n as u64
+    } else {
+        if got > 0 { lflags |= MSG_CTRUNC_LINUX; }
+        0
+    };
+    m.flags = lflags;
     r
 }
 /// `pthread_*` functions return an errno code directly rather than -1. The
@@ -468,87 +527,6 @@ pub unsafe extern "C" fn __wrap_sem_timedwait(sem: *mut c_void, ts: *const Times
     ret(unsafe { __cosmo_real_sem_timedwait(sem, &fixed) })
 }
 
-// ---- futex ------------------------------------------------------------------
-/// The Rust std thread parker waits on a futex: `syscall(SYS_futex, FUTEX_WAIT,
-/// ...)`. Cosmo's syscall() has no futex -- the call fails in userspace and
-/// every park returned immediately -- so each idle scheduler (rayon's pool,
-/// tokio's workers, the std's own threads) spun at full tilt. That is what
-/// pegged the node's cores with mining disabled. Emulate the futex-word
-/// protocol here: WAIT returns EAGAIN when the word has already changed (the
-/// caller re-checks), otherwise sleeps in 1 ms slices until the word changes or
-/// the deadline passes; WAKE is a no-op that reports nobody woken, because a
-/// waiter notices the word change on its next slice. Millisecond wake latency
-/// on an idle park is free; correctness only needs the value check to be right.
-unsafe extern "C" {
-    // Fixed-arity on purpose: forwarding through a C-variadic declaration loses
-    // the arguments on this ABI; the generated pass-through that this replaced
-    // passed them as six usize and that is what works.
-    fn __cosmo_real_syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize;
-}
-fn futex_now_ns() -> i64 {
-    let mut t = Timespec { tv_sec: 0, tv_nsec: 0 };
-    unsafe { __wrap_clock_gettime(1, &mut t as *mut _ as *mut c_void) };
-    t.tv_sec as i64 * 1_000_000_000 + t.tv_nsec as i64
-}
-fn futex_sleep_ms(ms: c_int) {
-    unsafe { __cosmo_real_poll(core::ptr::null_mut(), 0, if ms < 1 { 1 } else { ms }) };
-}
-fn futex_err(code: c_int) -> isize {
-    unsafe { *__errno_location() = code };
-    -1isize
-}
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wrap_syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
-    let n = a as core::ffi::c_long;
-    if n != 202 && n != 98 { // SYS_futex: 202 on x86_64, 98 on arm64/generic
-        let r = unsafe { __cosmo_real_syscall(a, b, c, d, e, f) };
-        if r as i32 == -1 { fix_errno(); }
-        return r;
-    }
-    let (a1, a2, a3, a4, a5, a6) = (b, c, d, e, f, 0usize);
-    let addr = a1 as *const u32;
-    let raw = a2 as c_int;
-    let op = raw & 0x7f;
-    match op {
-        0 | 9 => { // FUTEX_WAIT / FUTEX_WAIT_BITSET
-            let val = a3 as u32;
-            if unsafe { *addr } != val { return futex_err(11); } // EAGAIN: already changed
-            let ts = a4 as *const Timespec;
-            let end_ns = if ts.is_null() { None } else {
-                let t = unsafe { *ts };
-                // FUTEX_WAIT's timeout is relative; WAIT_BITSET's is absolute on
-                // the monotonic clock (real time if FUTEX_CLOCK_REALTIME). The
-                // callers re-check the word after any return, so an imprecise
-                // end time costs latency, never correctness.
-                let rel_ns = if op == 0 || (raw & 256) != 0 {
-                    if op == 0 { t.tv_sec as i64 * 1_000_000_000 + t.tv_nsec as i64 }
-                    else {
-                        let mut rt = Timespec { tv_sec: 0, tv_nsec: 0 };
-                        unsafe { __wrap_clock_gettime(0, &mut rt as *mut _ as *mut c_void) };
-                        (t.tv_sec - rt.tv_sec) as i64 * 1_000_000_000 + (t.tv_nsec - rt.tv_nsec) as i64
-                    }
-                } else {
-                    (t.tv_sec as i64 * 1_000_000_000 + t.tv_nsec as i64) - futex_now_ns()
-                };
-                Some(futex_now_ns() + if rel_ns > 0 { rel_ns } else { 0 })
-            };
-            loop {
-                if unsafe { *addr } != val { return 0; }
-                match end_ns {
-                    Some(end) => {
-                        let left_ns = end - futex_now_ns();
-                        if left_ns <= 0 { return futex_err(110); } // ETIMEDOUT
-                        let left_ms = (left_ns + 999_999) / 1_000_000;
-                        futex_sleep_ms(if left_ms > 1 { 1 } else { 1 });
-                    }
-                    None => futex_sleep_ms(1),
-                }
-            }
-        }
-        1 | 10 => 0, // FUTEX_WAKE(_BITSET): waiters notice the word change on their next slice
-        _ => futex_err(38), // ENOSYS
-    }
-}
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_getaddrinfo(node: *const c_char, service: *const c_char, hints: *const AddrInfo, res: *mut *mut AddrInfo) -> c_int {
     let mut h_copy;
@@ -607,7 +585,9 @@ pub unsafe extern "C" fn __wrap_clock_nanosleep(id: c_int, flags: c_int, req: *c
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wrap_poll(fds: *mut PollFd, n: u64, timeout: c_int) -> c_int {
     let g = gen::poll();
-    let s = unsafe { core::slice::from_raw_parts_mut(fds, n as usize) };
+    if n > isize::MAX as u64 / core::mem::size_of::<PollFd>() as u64 { return fail(EINVAL_LINUX); }
+    if fds.is_null() && n != 0 { return fail(EFAULT_LINUX); }
+    let s = if n == 0 { &mut [] } else { unsafe { core::slice::from_raw_parts_mut(fds, n as usize) } };
     for p in s.iter_mut() { p.events = g.to_host(p.events as i64) as i16; }
     let r = unsafe { __cosmo_real_poll(fds, n, timeout) };
     for p in s.iter_mut() { p.events = g.to_linux(p.events as i64) as i16; p.revents = g.to_linux(p.revents as i64) as i16; }
@@ -690,4 +670,136 @@ pub extern "C" fn lsetxattr(path: *const i8, name: *const i8, value: *const u8, 
     let _ = (path, name, value, size, flags);
     unsafe { *__errno_location() = libc::ENOSYS; }
     -1
+}
+
+// ---- ppoll -----------------------------------------------------------------------
+unsafe extern "C" {
+    fn __cosmo_real_ppoll(fds: *mut PollFd, n: u64, ts: *const c_void, mask: *const [u64; 2]) -> c_int;
+}
+/// A Linux sigset (bit sig-1, Linux signal numbers) in the host's numbering.
+fn sigset_to_host(m: &[u64; 2]) -> [u64; 2] {
+    let mut out = [0u64; 2];
+    for s in 1..=128i32 {
+        let (w, b) = (((s - 1) / 64) as usize, ((s - 1) % 64) as u32);
+        if m[w] >> b & 1 == 1 {
+            let h = sig(s);
+            if (1..=128).contains(&h) { out[((h - 1) / 64) as usize] |= 1 << ((h - 1) % 64); }
+        }
+    }
+    out
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_ppoll(fds: *mut PollFd, n: u64, ts: *const c_void, mask: *const [u64; 2]) -> c_int {
+    let g = gen::poll();
+    if n > isize::MAX as u64 / core::mem::size_of::<PollFd>() as u64 { return fail(EINVAL_LINUX); }
+    if fds.is_null() && n != 0 { return fail(EFAULT_LINUX); }
+    let s = if n == 0 { &mut [] } else { unsafe { core::slice::from_raw_parts_mut(fds, n as usize) } };
+    for p in s.iter_mut() { p.events = g.to_host(p.events as i64) as i16; }
+    let hmask;
+    let mp = if mask.is_null() || xlate::hostos() == xlate::HOST_LINUX { mask } else {
+        hmask = sigset_to_host(unsafe { &*mask });
+        &hmask as *const [u64; 2]
+    };
+    let r = unsafe { __cosmo_real_ppoll(fds, n, ts, mp) };
+    for p in s.iter_mut() { p.events = g.to_linux(p.events as i64) as i16; p.revents = g.to_linux(p.revents as i64) as i16; }
+    ret(r)
+}
+
+// ---- getifaddrs ------------------------------------------------------------------
+/// Linux layout, which cosmo shares.
+#[repr(C)]
+pub struct IfAddrs { next: *mut IfAddrs, name: *mut c_char, flags: c_uint, addr: *mut u16, netmask: *mut u16, ifu: *mut u16, data: *mut c_void }
+unsafe extern "C" { fn __cosmo_real_getifaddrs(out: *mut *mut IfAddrs) -> c_int; }
+/// Families inside each sockaddr and the IFF_* flags come back host-numbered.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_getifaddrs(out: *mut *mut IfAddrs) -> c_int {
+    if out.is_null() { return fail(EFAULT_LINUX); }
+    let r = unsafe { __cosmo_real_getifaddrs(out) };
+    if r != 0 { fix_errno(); return r; }
+    let mut p = unsafe { *out };
+    while !p.is_null() {
+        unsafe {
+            (*p).flags = gen::iff().to_linux((*p).flags as i64) as c_uint;
+            family_to_linux((*p).addr);
+            family_to_linux((*p).netmask);
+            family_to_linux((*p).ifu);
+            p = (*p).next;
+        }
+    }
+    0
+}
+
+// ---- syscall: futex ----------------------------------------------------------------
+// cosmopolitan's syscall() implements only getrandom, gettid and getcpu and
+// fails everything else with ENOSYS, on every host. std's Mutex/Condvar/park
+// (sys/sync/futex) call syscall(SYS_futex, ...), so without this every
+// blocking wait in std busy-spins. Map the futex operations std and other
+// Linux code use onto cosmo's portable futex (futex(2) on Linux, ulock on XNU,
+// WaitOnAddress on Windows, futex/umtx on the BSDs).
+unsafe extern "C" {
+    fn __cosmo_real_syscall(n: usize, a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize;
+    fn cosmo_futex_wait(w: *mut c_int, expect: c_int, pshared: c_char, clock: c_int, abstime: *const Timespec) -> c_int;
+    fn cosmo_futex_wake(w: *mut c_int, count: c_int, pshared: c_char) -> c_int;
+}
+
+#[cfg(target_arch = "x86_64")] const SYS_FUTEX: usize = 202;
+#[cfg(target_arch = "aarch64")] const SYS_FUTEX: usize = 98;
+
+const ENOSYS_LINUX: c_int = 38;
+#[inline] fn fail_host(neg_host_errno: c_int) -> isize {
+    unsafe { *__errno_location() = xlate::errno_to_linux(-neg_host_errno as i64) as c_int; }
+    -1
+}
+
+unsafe fn futex(uaddr: *mut c_int, op: c_int, val: c_int, timeout: *const Timespec, val3: u32) -> isize {
+    const WAIT: c_int = 0; const WAKE: c_int = 1; const WAIT_BITSET: c_int = 9; const WAKE_BITSET: c_int = 10;
+    const PRIVATE: c_int = 128; const CLOCK_REALTIME_FLAG: c_int = 256;
+    const CLOCK_REALTIME: c_int = 0; const CLOCK_MONOTONIC: c_int = 1; // Linux numbering
+    let pshared = (op & PRIVATE == 0) as c_char;
+    let cmd = op & !(PRIVATE | CLOCK_REALTIME_FLAG);
+    match cmd {
+        WAKE | WAKE_BITSET => {
+            if cmd == WAKE_BITSET && val3 != u32::MAX { return fail(ENOSYS_LINUX) as isize; }
+            let r = unsafe { cosmo_futex_wake(uaddr, val, pshared) };
+            if r < 0 { fail_host(r) } else { r as isize }
+        }
+        WAIT | WAIT_BITSET => {
+            if cmd == WAIT_BITSET && val3 != u32::MAX { return fail(ENOSYS_LINUX) as isize; }
+            if cmd == WAIT && op & CLOCK_REALTIME_FLAG != 0 { return fail(ENOSYS_LINUX) as isize; }
+            let lclock = if op & CLOCK_REALTIME_FLAG != 0 { CLOCK_REALTIME } else { CLOCK_MONOTONIC };
+            let hclock = clockid(lclock);
+            let abs;
+            let ap = if timeout.is_null() { core::ptr::null() } else {
+                let t = unsafe { *timeout };
+                if t.tv_nsec < 0 || t.tv_nsec >= 1_000_000_000 || t.tv_sec < 0 { return fail(EINVAL_LINUX) as isize; }
+                if cmd == WAIT {
+                    // FUTEX_WAIT's timeout is relative (CLOCK_MONOTONIC); cosmo wants absolute.
+                    let mut now = Timespec { tv_sec: 0, tv_nsec: 0 };
+                    if unsafe { __cosmo_real_clock_gettime(hclock, &mut now as *mut Timespec as *mut c_void) } != 0 { fix_errno(); return -1; }
+                    let mut ns = now.tv_nsec + t.tv_nsec;
+                    let mut s = now.tv_sec.saturating_add(t.tv_sec);
+                    if ns >= 1_000_000_000 { ns -= 1_000_000_000; s = s.saturating_add(1); }
+                    abs = Timespec { tv_sec: s, tv_nsec: ns };
+                } else {
+                    abs = t;
+                }
+                &abs as *const Timespec
+            };
+            let r = unsafe { cosmo_futex_wait(uaddr, val, pshared, hclock, ap) };
+            if r < 0 { fail_host(r) } else { 0 }
+        }
+        _ => fail(ENOSYS_LINUX) as isize,
+    }
+}
+
+/// syscall(2) is variadic; on SysV x86-64 and AAPCS64 integer varargs travel
+/// exactly like fixed arguments, so a seven-word signature forwards any call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wrap_syscall(n: usize, a: usize, b: usize, c: usize, d: usize, e: usize, f: usize) -> isize {
+    if n == SYS_FUTEX {
+        return unsafe { futex(a as *mut c_int, b as c_int, c as c_int, d as *const Timespec, f as u32) };
+    }
+    let r = unsafe { __cosmo_real_syscall(n, a, b, c, d, e, f) };
+    if r as i32 == -1 { fix_errno(); }
+    r
 }

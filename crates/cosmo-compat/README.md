@@ -6,7 +6,8 @@ themselves — each is a `#[no_mangle]` definition the linker prefers over the o
 in `libcosmo.a`, because an archive member is only pulled in to satisfy a symbol
 that is still undefined.
 
-It is not optional. Cosmopolitan declares
+The shim is necessary, but an explicit Cargo dependency is optional since
+version 10: `cargo-cosmo` and `cosmo-build` inject it automatically. Cosmopolitan declares
 `char *__xpg_strerror_r(int, char *, size_t)` — the GNU contract — while Rust's
 std links that same symbol expecting the POSIX XSI one, which returns `int`. std
 reinterprets the returned pointer as an int, finds the sign bit set, and panics
@@ -16,16 +17,17 @@ anything exotic does.
 
 The crate also carries the stage-2 normalization shim: cosmopolitan resolves OS
 constants at load time while rustc bakes in Linux's values at compile time, so
-123 libc entry points are `--wrap`ped and translated at the boundary.
+126 libc entry points are `--wrap`ped and translated at the boundary.
 
 ## Use
 
-Paired with [`cosmo-build`](https://crates.io/crates/cosmo-build), which sets
+For projects retaining an explicit dependency, pair with the same major of
+[`cosmo-build`](https://crates.io/crates/cosmo-build), which sets
 `cfg(cosmo)` and adds the `--wrap` flags:
 
 ```toml
 [target.'cfg(cosmo)'.dependencies]
-cosmo-compat = "5"
+cosmo-compat = "10"
 ```
 
 ```rust

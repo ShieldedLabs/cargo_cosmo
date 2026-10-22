@@ -20,7 +20,8 @@ pub fn build(
 
    let mut per_arch = Vec::new();
    for (arch, spec) in ARCHES.iter().zip(glue.specs.iter()) {
-      per_arch.push(cargo(arch, spec, &glue, manifest_dir, release, args)?);
+      let inject = crate::inject::build(cache, arch, spec)?;
+      per_arch.push(cargo(arch, spec, &glue, &inject, manifest_dir, release, args)?);
    }
 
    // Only fuse binaries that exist on both sides; an example built for one
@@ -55,6 +56,7 @@ fn cargo(
    arch: &str,
    spec: &Path,
    glue: &Glue,
+   inject: &Path,
    manifest_dir: &Path,
    release: bool,
    args: &[&str],
@@ -114,7 +116,9 @@ fn cargo(
    // cfg(cosmo) lets a crate pick a cosmo-specific code path, and gates the
    // cosmo-compat dependency. Appended to, not replacing, any RUSTFLAGS set.
    let flags = std::env::var("COSMO_RUSTFLAGS").unwrap_or_default();
-   cmd.env("RUSTFLAGS", format!("{flags} --cfg cosmo").trim().to_string());
+   let mut flags: Vec<String> = flags.split_whitespace().map(str::to_owned).collect();
+   flags.extend(["--cfg".into(), "cosmo".into(), format!("-Clink-arg={}", inject.display())]);
+   cmd.env("CARGO_ENCODED_RUSTFLAGS", flags.join("\x1f"));
 
    // The outer cargo holds an exclusive lock on its target dir; a nested cargo
    // against the same one blocks on it until killed.
@@ -285,7 +289,7 @@ pub fn ape(path: &Path) -> Command {
 ///
 /// Inherited, these override the nested `rustup run <nightly> cargo` and the
 /// inner build dies with "1 nightly option were parsed" from a stable rustc.
-fn scrub(cmd: &mut Command) {
+pub(crate) fn scrub(cmd: &mut Command) {
    for key in [
       "RUSTC",
       "RUSTDOC",

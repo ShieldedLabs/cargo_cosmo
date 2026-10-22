@@ -1,7 +1,7 @@
 #!/bin/sh
 # End-to-end check: build every example for both architectures, fuse each into
-# a fat APE, and run the result. No mocks and no unit tests -- if this passes,
-# real binaries were built and really executed.
+# a fat APE, and run the result. Apart from the tool-dispatch regression,
+# these checks build and execute real binaries, not mocks.
 #
 #   tests/run-all.sh
 #
@@ -14,7 +14,9 @@ PATH="$REPO/tools:$REPO/toolchain/cosmocc/bin:$PATH"
 export PATH
 
 # Specs embed an absolute linker path, so they are generated, never committed.
-python3 "$REPO/tools/gen-target-specs.py" >/dev/null
+python3 "$REPO/tools/gen-target-specs.py" >/dev/null || exit 1
+# APE tool dispatch is also checked without needing a non-Linux host.
+python3 -B "$REPO/tests/test-inject.py" || exit 1
 
 # The host decides what can be *executed* here. A bare cosmo ELF only runs on
 # Linux, and "every constant matches what rustc baked in" is only true there
@@ -86,7 +88,7 @@ cd "$REPO/examples/rust-nostd" || exit 1
 cargo build --release -Zjson-target-spec \
    -Zbuild-std=core,compiler_builtins \
    -Zbuild-std-features=compiler-builtins-mem \
-   --target "$REPO/targets/x86_64-unknown-cosmo.json" >/dev/null 2>&1
+   --target "$REPO/targets/x86_64-unknown-cosmo.json" >/dev/null || exit 1
 if [ "$HOST" = Linux ] && [ "$HOST_ARCH" = x86_64 ]; then
    check "no_std links and runs" \
       "$(./target/x86_64-unknown-cosmo/release/nostd)" "no_std Rust APE"
@@ -150,6 +152,18 @@ cargo cosmo build --release >/dev/null || exit 1
 probe=$(ape ./target/cosmo/release/cross-os-probe.com 2>&1)
 check "fs::canonicalize resolves a plain file" "$probe" "resolved=/"
 check "read_link on a plain file reports Linux's EINVAL" "$probe" "err=InvalidInput"
+
+# --------------------------------------------------- no-dependency shim injection
+banner "zero Cargo dependencies: sockets, ppoll, interfaces and blocking futex"
+cd "$REPO/tests/zero-deps" || exit 1
+cargo cosmo build --release >/dev/null || exit 1
+if [ "$HOST" = Linux ]; then
+   zero=$(ape ./target/cosmo/release/zero-deps-probe.com 2>&1)
+   printf '%s\n' "$zero"
+   check "dependency-free std and Linux ABI networking" "$zero" "ZERO_DEPS_OK"
+else
+   note "zero-deps Linux networking/futex runtime probe" "new paths unverified on $HOST"
+fi
 
 # ------------------------------------------------------ aarch64 reserved regs
 banner "aarch64 honours cosmo's reserved x18/x28"

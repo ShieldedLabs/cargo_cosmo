@@ -31,6 +31,7 @@ futimens
 getaddrinfo
 getcwd
 gethostname
+getifaddrs
 getpeername
 getpwuid_r
 getrandom
@@ -65,6 +66,7 @@ posix_spawnattr_setflags
 posix_spawnattr_setpgroup
 posix_spawnattr_setsigdefault
 posix_spawnp
+ppoll
 pread
 preadv
 pthread_attr_destroy

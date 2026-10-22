@@ -1,0 +1,34 @@
+[package]
+name = "cosmo-compat"
+version = "10.0.0"
+edition = "2021"
+rust-version = "1.74"
+license = "MIT"
+description = "Libc shims where Cosmopolitan and Rust's std disagree — link it into a cosmo target and the fixes apply themselves"
+repository = "https://github.com/ShieldedLabs/cargo_cosmo"
+documentation = "https://docs.rs/cosmo-compat"
+readme = "README.md"
+keywords = ["ape", "cosmopolitan", "libc", "shim", "portable"]
+categories = ["no-std", "os", "external-ffi-bindings"]
+include = ["src/**", "wrap.txt", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "cosmo_compat"
+path = "src/lib.rs"
+
+[dependencies]
+# tempfile and its friends call rustix, whose default backend emits raw Linux
+# syscalls that never reach cosmo's translation layer -- rename is the measured
+# casualty: it fails in userspace and no syscall is ever seen. Forcing rustix's
+# libc backend routes those calls through the __wrap_ translators like any other
+# libc call. Cargo's feature unification applies this to every rustix in the
+# build, not just ours. Do not enable std ourselves: the shim also serves no_std
+# programs. Applications needing rustix/std still enable it in their own graph.
+rustix = { version = "1", default-features = false, features = ["use-libc"] }
+# Only for the shape of the structs std passes in: libc::stat and
+# libc::sigaction are per-target, and the shims convert between them and
+# cosmopolitan's fixed layouts.
+libc = "0.2"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(cosmo_compat_inject)"] }

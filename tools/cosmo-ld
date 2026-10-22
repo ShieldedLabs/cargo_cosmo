@@ -42,6 +42,9 @@ esac
 
 OUTPUT=
 ARGS=
+INJECT=
+HAVE_COMPAT_RLIB=
+ANY_RLIB=
 
 while [ $# -gt 0 ]; do
    arg=$1
@@ -68,10 +71,36 @@ while [ $# -gt 0 ]; do
       # Already implied by -nostdlib.
       -nodefaultlibs|-nostartfiles|-nostdlib) ;;
 
+      # The cosmo-compat shim object cargo-cosmo builds and passes as
+      # -C link-arg (see ensure_inject in tools/cargo-cosmo). Held back here and
+      # added below only if the crate graph does not already carry cosmo-compat.
+      */cosmo_compat_inject-*.o) INJECT=$arg ;;
+
+      */libcosmo_compat-*.rlib) HAVE_COMPAT_RLIB=1; ANY_RLIB=1; ARGS="$ARGS $arg" ;;
+      *.rlib) ANY_RLIB=1; ARGS="$ARGS $arg" ;;
+
       *) ARGS="$ARGS $arg" ;;
    esac
    shift
 done
+
+# Zero-dependency crates get the shim from cargo-cosmo; crates that depend on
+# cosmo-compat themselves keep theirs (the two would define every __wrap_*
+# twice). Under fat LTO rustc merges every rlib into one object, so with no
+# rlib on the line at all, look for the shim's definitions in the objects.
+if [ -n "$INJECT" ] && [ -z "$HAVE_COMPAT_RLIB" ] && [ -z "$ANY_RLIB" ]; then
+   for a in $ARGS; do
+      case "$a" in
+         *.o)
+            if "$BIN/$ARCH-linux-cosmo-nm" -g --defined-only "$a" 2>/dev/null | grep -q ' __wrap_open$'; then
+               HAVE_COMPAT_RLIB=1; break
+            fi ;;
+      esac
+   done
+fi
+if [ -n "$INJECT" ] && [ -z "$HAVE_COMPAT_RLIB" ]; then
+   ARGS="$ARGS $INJECT"
+fi
 
 [ -n "$OUTPUT" ] || { echo "cosmo-ld: no -o in link line" >&2; exit 1; }
 

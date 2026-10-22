@@ -11,6 +11,7 @@ fuses the two ELFs with apelink, which is exactly what cosmocc does for C.
 
 Output lands in target/cosmo/<profile>/<name>.com and runs on x86-64 and arm64.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -21,6 +22,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN = os.path.join(REPO, "toolchain", "cosmocc", "bin")
 TARGETS = os.path.join(REPO, "targets")
 ARCHES = ("x86_64", "aarch64")
+COMPAT = os.path.join(REPO, "crates", "cosmo-compat")
+INJECT_DIR = os.path.join(REPO, "target", "cosmo-compat-inject")
 
 # std is not shipped prebuilt for a custom target spec, so every build is a
 # build-std build. panic_unwind because cosmo provides the full _Unwind_* ABI.
@@ -138,7 +141,8 @@ def ensure_spec(arch):
    if stale:
       print(f"cargo-cosmo: generating target specs", file=sys.stderr)
       gen = os.path.join(REPO, "tools", "gen-target-specs.py")
-      if subprocess.call([sys.executable, gen]) != 0:
+      env = dict(os.environ, CARGO_COSMO_TOOLCHAIN=toolchain())
+      if subprocess.call([sys.executable, gen], env=env) != 0:
          die("could not generate target specs")
    return spec
 
@@ -148,18 +152,141 @@ def die(msg):
    sys.exit(1)
 
 
+def toolchain():
+   """The nightly every cargo/rustc call runs on.
+
+   CARGO_COSMO_TOOLCHAIN if set, else this repo's own pin. Not the building
+   crate's rust-toolchain.toml or rustup default: the target specs, build-std
+   and the shim are validated against exactly the pinned nightly, and a crate
+   built from its own directory (a stable-pinned or unpinned project) would
+   otherwise get stable cargo, which rejects every -Z flag.
+   """
+   tc = os.environ.get("CARGO_COSMO_TOOLCHAIN")
+   if tc:
+      return tc
+   with open(os.path.join(REPO, "rust-toolchain.toml")) as f:
+      for line in f:
+         line = line.strip()
+         if line.startswith("channel"):
+            return line.split("=", 1)[1].strip().strip('"')
+   die("rust-toolchain.toml has no channel")
+
+
+def tool(arch, name):
+   return os.path.join(BIN, f"{arch}-linux-cosmo-{name}")
+
+
+def tool_command(arch, name, *args):
+   """Run native or APE binutils through the same dispatch as other tools."""
+   return ape(tool(arch, name), *args)
+
+
+def ensure_inject(arch, spec):
+   """Build cosmo-compat as one self-contained object for `arch`; return its path.
+
+   This is what lets a crate with no dependency on cosmo-compat link: cosmo-ld
+   wraps every libc symbol in wrap.txt, and something has to define the
+   __wrap_* translators. The shim is compiled as a staticlib (its own core and
+   compiler_builtins), relocatably linked down to what the shim's exports
+   reach, and every symbol except those exports is made local, so its private
+   copy of core cannot collide with the binary's. cosmo-ld adds the object
+   unless the crate graph already has cosmo-compat.
+
+   Keyed by the shim sources, the target spec and the toolchain; the path
+   carries the key, so a changed shim changes RUSTFLAGS and cargo relinks.
+   """
+   h = hashlib.sha256()
+   h.update(toolchain().encode())
+   files = [os.path.join(COMPAT, "Cargo.toml"), os.path.join(COMPAT, "wrap.txt"), spec]
+   src = os.path.join(COMPAT, "src")
+   files += sorted(os.path.join(src, n) for n in os.listdir(src) if n.endswith(".rs"))
+   for path in files:
+      h.update(os.path.basename(path).encode())
+      with open(path, "rb") as f:
+         h.update(f.read())
+   key = h.hexdigest()[:16]
+   out = os.path.join(INJECT_DIR, arch, f"cosmo_compat_inject-{key}.o")
+   if os.path.exists(out):
+      return out
+
+   print(f"cargo-cosmo: building the cosmo-compat shim for {arch}", file=sys.stderr)
+   tdir = os.path.join(INJECT_DIR, "build")
+   cmd = ["cargo", "+" + toolchain(), "rustc", "--manifest-path", os.path.join(COMPAT, "Cargo.toml"),
+          "--release", "--lib", "--crate-type", "staticlib",
+          "-Zjson-target-spec", "-Zbuild-std=std,panic_abort",
+          "--target", spec, "--target-dir", tdir,
+          "--config", 'profile.release.panic="abort"',
+          "--config", "profile.release.codegen-units=1",
+          "--config", "profile.release.lto=false",
+          "--", "--cfg", "cosmo", "--cfg", "cosmo_compat_inject"]
+   env = {k: v for k, v in os.environ.items()
+          if k not in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_TARGET_DIR", "CARGO_BUILD_TARGET")}
+   proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=COMPAT)
+   if proc.returncode != 0:
+      sys.stderr.write(proc.stderr)
+      die(f"cosmo-compat shim build failed for {arch}")
+   stem = os.path.splitext(os.path.basename(spec))[0]
+   lib = os.path.join(tdir, stem, "release", "libcosmo_compat.a")
+
+   nm = subprocess.run(tool_command(arch, "nm", "-A", "-g", "--defined-only", lib),
+                       capture_output=True, text=True, check=True).stdout
+   exports = set()
+   for line in nm.splitlines():
+      parts = line.split()
+      # <archive>:<member>: <addr> <type> <name>
+      if len(parts) == 3 and ":cosmo_compat-" in parts[0]:
+         name = parts[2]
+         if not name.startswith(("_ZN", "_R")):
+            exports.add(name)
+   with open(os.path.join(COMPAT, "wrap.txt")) as f:
+      wraps = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+   missing = [w for w in wraps if f"__wrap_{w}" not in exports]
+   if missing:
+      die(f"cosmo-compat shim lacks __wrap_ for: {' '.join(missing)}")
+
+   os.makedirs(os.path.dirname(out), exist_ok=True)
+   tmp = f"{out}.{os.getpid()}"
+   explist = tmp + ".exports"
+   with open(explist, "w") as f:
+      f.write("\n".join(sorted(exports)) + "\n")
+   roots = [a for e in sorted(exports) for a in ("-u", e)]
+   try:
+      subprocess.run(tool_command(arch, "ld", "-r", "--gc-sections", *roots, "-o", tmp + ".r", lib), check=True)
+      subprocess.run(tool_command(arch, "objcopy", f"--keep-global-symbols={explist}", tmp + ".r", tmp), check=True)
+      # Nothing of the shim's private core may be left for the final link to
+      # resolve against the binary's (differently hashed) core.
+      und = subprocess.run(tool_command(arch, "nm", "-u", tmp), capture_output=True, text=True, check=True).stdout
+      leaked = [l.split()[-1] for l in und.splitlines() if l.split() and l.split()[-1].startswith(("_ZN", "_R"))]
+      if leaked:
+         die(f"cosmo-compat shim object references Rust symbols it should own: {' '.join(leaked[:8])}")
+      os.replace(tmp, out)
+   except subprocess.CalledProcessError as e:
+      die(f"could not build the shim object for {arch}: {e}")
+   finally:
+      for p in (tmp, tmp + ".r", explist):
+         if os.path.exists(p):
+            os.remove(p)
+   return out
+
+
+def rustflags(extra_flags):
+   """The caller's RUSTFLAGS (or CARGO_ENCODED_RUSTFLAGS) plus ours, encoded so
+   paths with spaces survive."""
+   enc = os.environ.get("CARGO_ENCODED_RUSTFLAGS")
+   if enc is not None:
+      base = enc.split("\x1f") if enc else []
+   else:
+      base = os.environ.get("RUSTFLAGS", "").split()
+   return "\x1f".join(base + extra_flags)
+
+
 def build_arch(arch, profile, extra):
    """Run cargo for one arch; return {bin_name: path} for every executable."""
    check_toolchain(arch)
    spec = ensure_spec(arch)
 
-   # No explicit +toolchain: that would override rust-toolchain.toml and pull
-   # whatever nightly happens to be newest, which is exactly the drift the pin
-   # exists to prevent. CARGO_COSMO_TOOLCHAIN forces one when you want to test
-   # against a different nightly.
-   cmd = ["cargo"]
-   if os.environ.get("CARGO_COSMO_TOOLCHAIN"):
-      cmd.append("+" + os.environ["CARGO_COSMO_TOOLCHAIN"])
+   # Always the pinned nightly (see toolchain()), never the building crate's.
+   cmd = ["cargo", "+" + toolchain()]
    cmd += ["build", *CARGO_Z, "--target", spec,
            "--message-format=json-render-diagnostics"]
    if profile == "release":
@@ -168,10 +295,16 @@ def build_arch(arch, profile, extra):
    cmd += extra
 
    # `cfg(cosmo)` lets a crate pick a cosmo-specific code path (softer_gui routes
-   # its syscalls through cosmo's libc under it). Appended to, not replacing, any
-   # RUSTFLAGS the caller set. CARGO_ENCODED_RUSTFLAGS would win over this if set.
+   # its syscalls through cosmo's libc under it). The shim object goes in as a
+   # link-arg (cosmo-ld drops it again when the crate depends on cosmo-compat
+   # itself); CARGO_COSMO_NO_INJECT=1 leaves it out entirely. Appended to, not
+   # replacing, the caller's RUSTFLAGS / CARGO_ENCODED_RUSTFLAGS.
+   flags = ["--cfg", "cosmo"]
+   if not os.environ.get("CARGO_COSMO_NO_INJECT"):
+      flags.append("-Clink-arg=" + ensure_inject(arch, spec))
    env = dict(os.environ)
-   env["RUSTFLAGS"] = (env.get("RUSTFLAGS", "") + " --cfg cosmo").strip()
+   env.pop("RUSTFLAGS", None)
+   env["CARGO_ENCODED_RUSTFLAGS"] = rustflags(flags)
 
    print(f"cargo-cosmo: building {arch}", file=sys.stderr)
    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)

@@ -1233,6 +1233,40 @@ pub fn rlimit() -> Group {
     crate::xlate::group(Kind::Enum, &NAMES_rlimit, &LINUX_rlimit, &STATE_rlimit, &raw mut HOST_rlimit, host_rlimit)
 }
 
+// ---- iff (mask) ----
+#[cfg(not(test))]
+unsafe extern "C" {
+    static IFF_ALLMULTI: i32;
+    static IFF_AUTOMEDIA: i32;
+    static IFF_BROADCAST: i32;
+    static IFF_DEBUG: i32;
+    static IFF_DYNAMIC: i32;
+    static IFF_LOOPBACK: i32;
+    static IFF_MASTER: i32;
+    static IFF_MULTICAST: i32;
+    static IFF_NOARP: i32;
+    static IFF_NOTRAILERS: i32;
+    static IFF_POINTOPOINT: i32;
+    static IFF_PORTSEL: i32;
+    static IFF_PROMISC: i32;
+    static IFF_RUNNING: i32;
+    static IFF_SLAVE: i32;
+    static IFF_UP: i32;
+}
+#[cfg(not(test))]
+fn host_iff() -> [i64; 16] { unsafe { [IFF_ALLMULTI as i64, IFF_AUTOMEDIA as i64, IFF_BROADCAST as i64, IFF_DEBUG as i64, IFF_DYNAMIC as i64, IFF_LOOPBACK as i64, IFF_MASTER as i64, IFF_MULTICAST as i64, IFF_NOARP as i64, IFF_NOTRAILERS as i64, IFF_POINTOPOINT as i64, IFF_PORTSEL as i64, IFF_PROMISC as i64, IFF_RUNNING as i64, IFF_SLAVE as i64, IFF_UP as i64] } }
+#[cfg(test)]
+fn host_iff() -> [i64; 16] { crate::xlate::test_host(&WINDOWS_iff, &XNU_iff) }
+pub static NAMES_iff: [&str; 16] = ["IFF_ALLMULTI", "IFF_AUTOMEDIA", "IFF_BROADCAST", "IFF_DEBUG", "IFF_DYNAMIC", "IFF_LOOPBACK", "IFF_MASTER", "IFF_MULTICAST", "IFF_NOARP", "IFF_NOTRAILERS", "IFF_POINTOPOINT", "IFF_PORTSEL", "IFF_PROMISC", "IFF_RUNNING", "IFF_SLAVE", "IFF_UP"];
+pub static LINUX_iff: [i64; 16] = [512, 16384, 2, 4, 32768, 8, 1024, 4096, 128, 32, 16, 8192, 256, 64, 2048, 1];
+pub static WINDOWS_iff: [i64; 16] = [512, 0, 2, 4, 0, 4, 0, 4096, 128, 0, 16, 0, 0, 0, 0, 1];
+pub static XNU_iff: [i64; 16] = [512, 0, 2, 4, 0, 8, 0, 32768, 128, 32, 16, 0, 256, 64, 0, 1];
+static mut HOST_iff: [i64; 16] = [0; 16];
+static STATE_iff: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+pub fn iff() -> Group {
+    crate::xlate::group(Kind::Mask, &NAMES_iff, &LINUX_iff, &STATE_iff, &raw mut HOST_iff, host_iff)
+}
+
 // ---- errno-only wrappers: pass the registers through, fix errno on failure ----
 // Sound because every function here takes only integer/pointer arguments (no
 // floats, no structs by value), which the SysV and AAPCS conventions pass in the
